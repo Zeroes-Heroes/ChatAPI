@@ -1,0 +1,28 @@
+version: '3.4'
+
+services:
+  chatserver.api:
+    container_name: chatapi
+    env_file: .env
+    restart: unless-stopped
+    ports:
+      - "443:8080"
+    image: ${DOCKER_REGISTRY-}chatserverapi
+    build:
+      context: .
+      dockerfile: ./WebAPI/Dockerfile
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+  
+  redis:
+    container_name: redis
+    image: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
