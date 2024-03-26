@@ -1,5 +1,8 @@
+using Application.DTOs.User;
 using Application.Models.Authorization;
 using Application.UseCases.Abstractions;
+using Application.Utilities;
+using EmitMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebAPI.Models.User.Request;
@@ -14,19 +17,19 @@ namespace WebAPI.Controllers
 	{
 		[AllowAnonymous]
 		[HttpPost("register")]
-		public Task Register([FromBody] AuthRequestModel payload) =>
-			userService.Register(payload.Email, payload.Password);
+		public Task Register([FromBody] UserRegisterDTO payload) =>
+			userService.Register(payload);
 
 		[AllowAnonymous]
 		[HttpPost("login")]
-		public async Task<ActionResult<TokensDTO>> Login([FromBody] AuthRequestModel payload)
+		public async Task<ActionResult<TokensDTO>> Login([FromBody] UserLoginDTO payload)
 		{
-			TokensDTO? tokens = await userService.Login(payload.Email, payload.Password);
-			
-			if (tokens is null)
-				return Unauthorized();
+			Result<TokensDTO> result = await userService.Login(payload);
 
-			return tokens;
+			if (!result.IsSuccess)
+				return StatusCode(result.StatusCode, result.Error);
+
+			return result.Data;
 		}
 
 		[HttpPost("tokens/refresh")]

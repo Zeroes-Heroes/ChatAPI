@@ -35,12 +35,6 @@ namespace WebAPI.Services.Authorization
 			return tokens;
 		}
 
-		private static async Task CacheTokens(IDistributedCache cache, int userId, TokensDTO tokens)
-		{
-			await CacheToken(cache, userId, tokens.AccessToken, CacheKeys.AccessToken, AccessTokenTTL);
-			await CacheToken(cache, userId, tokens.RefreshToken, CacheKeys.RefreshToken, RefreshTokenTTL);
-		}
-
 		/// <summary>
 		/// Removes all user tokens from the cache.
 		/// </summary>
@@ -56,6 +50,12 @@ namespace WebAPI.Services.Authorization
 
 		public Task<bool> ValidateRefreshToken(string refreshToken) =>
 			ValidateToken(refreshToken, TokenType.RefreshToken);
+
+		private static async Task CacheTokens(IDistributedCache cache, int userId, TokensDTO tokens)
+		{
+			await CacheToken(cache, userId, tokens.AccessToken, CacheKeys.AccessToken, AccessTokenTTL);
+			await CacheToken(cache, userId, tokens.RefreshToken, CacheKeys.RefreshToken, RefreshTokenTTL);
+		}
 
 		private async Task<bool> ValidateToken(string token, TokenType tokenType)
 		{

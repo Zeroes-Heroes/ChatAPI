@@ -1,9 +1,21 @@
-﻿namespace Domain.Entities
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Domain.Entities
 {
-	public class User(string email, string password)
+	public class User
 	{
 		public int Id { get; set; }
-		public string Email { get; set; } = email;
-		public string Password { get; set; } = password;
-	}
+
+		[Required]
+		public required string Email { get; set; }
+
+		[Required]
+		public required string Password { get; set; }
+
+		[Required]
+		public required string Phone { get; set; }
+
+		[Required]
+		public DateTime CreatedOn { get; set; }
+	};
 }
