@@ -1,14 +1,12 @@
-﻿using Domain.Entities;
+﻿using Application.DTOs.User;
+using Domain.Entities;
 
 namespace Application.UseCases.Abstractions
 {
 	public interface IUserRepository
-	{
-		/// <summary>
-		/// Gets the user entity by email
-		/// </summary>
-		/// <param name="email">The email of the user</param>
-		Task<User?> GetUserByEmail(string email);
-		Task AddUser(string email, string hashedPassword);
+	{	
+		Task AddUser(UserRegisterDTO user);
+		Task<User?> GetUserByUserId(int userId);
+		Task<User?> GetUserByEmail(string email, bool trackEntity = true);
 	}
 }

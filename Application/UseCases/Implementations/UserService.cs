@@ -1,29 +1,32 @@
-﻿using Application.Models.Authorization;
+﻿using System.Net;
+using Application.DTOs.User;
+using Application.Models.Authorization;
 using Application.UseCases.Abstractions;
+using Application.Utilities;
 using Domain.Entities;
 
 namespace Application.UseCases.Implementations
 {
 	public class UserService(IUserRepository userRepo, IPasswordHasher passwordManager, ITokenService tokenService) : IUserService
 	{
-		public async Task<TokensDTO?> Login(string email, string providedPassword)
+		public async Task Register(UserRegisterDTO user)
 		{
-			User? user = await userRepo.GetUserByEmail(email);
+			user.Password = passwordManager.HashPassword(user.Password);
+			await userRepo.AddUser(user);
+		}
 
-			if (UserCredentialsAreValid(providedPassword, user))
-				return await tokenService.GenerateTokens(user.Id);
+		public async Task<Result<TokensDTO>> Login(UserLoginDTO userDto)
+		{
+			User? entity = await userRepo.GetUserByEmail(userDto.Email);
 
-			return null;
+			if (UserCredentialsAreValid(userDto.Password, entity))
+				return Result<TokensDTO>.Success(await tokenService.GenerateTokens(entity!.Id));
+
+			return Result<TokensDTO>.Failure("Invalid login credentials", (int)HttpStatusCode.Unauthorized);
 		}
 
 		public Task Logout(int userId) =>
 			tokenService.RevokeTokens(userId);
-
-		public async Task Register(string email, string password)
-		{
-			string hashedPassword = passwordManager.HashPassword(password);
-			await userRepo.AddUser(email, hashedPassword);
-		}
 
 		private bool UserCredentialsAreValid(string providedPassword, User? user) =>
 			user != null && passwordManager.VerifyPassword(providedPassword, user.Password);

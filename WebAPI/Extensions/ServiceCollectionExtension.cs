@@ -126,6 +126,8 @@ namespace WebAPI.Extensions
 				.AddTransient<IPasswordHasher, PasswordHasher>()
 				.AddTransient<ITokenService, TokenService>()
 				.AddScoped<IUserRepository, UserRepository>()
-				.AddScoped<IUserService, UserService>();
+				.AddScoped<IFriendshipRepository, FriendshipRepository>()
+				.AddScoped<IUserService, UserService>()
+				.AddScoped<IFriendshipService, FriendshipService>();
 	}
 }
