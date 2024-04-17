@@ -128,6 +128,7 @@ namespace WebAPI.Extensions
 				.AddScoped<IUserRepository, UserRepository>()
 				.AddScoped<IFriendshipRepository, FriendshipRepository>()
 				.AddScoped<IUserService, UserService>()
-				.AddScoped<IFriendshipService, FriendshipService>();
+				.AddScoped<IFriendshipService, FriendshipService>()
+				.AddSignalR().Services;
 	}
 }

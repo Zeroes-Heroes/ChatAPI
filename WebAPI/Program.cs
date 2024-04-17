@@ -1,9 +1,21 @@
 using WebAPI.Extensions;
+using WebAPI.Hubs;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services
+	.AddCors(options =>
+	{
+		options.AddPolicy("AllowOrigin", builder =>
+		{
+			builder
+				.WithOrigins("null")
+				.AllowAnyHeader()
+				.AllowAnyMethod()
+				.AllowCredentials(); // Allow credentials if needed
+		});
+	})
 	.ConfigureAppSettings(builder.Configuration)
 	.AddSwagger()
 	.AddDatabase(builder.Configuration)
@@ -21,9 +33,12 @@ if (app.Environment.IsDevelopment())
 else
 	app.UseExceptionHandler("/error");
 
+app.UseCors("AllowOrigin");
+
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<ChatHub>("/chatHub");
 
 app.Run();

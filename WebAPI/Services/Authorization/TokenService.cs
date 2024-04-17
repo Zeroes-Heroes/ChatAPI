@@ -101,7 +101,7 @@ namespace WebAPI.Services.Authorization
 			SecurityTokenDescriptor accessTokenDescriptor = GetTokenDescriptor(userId, now.AddMinutes(accessTokenTTL));
 			SecurityTokenDescriptor refreshTokenDescriptor = GetTokenDescriptor(userId, now.AddMinutes(refreshTokenTTL));
 
-			JsonWebTokenHandler handler = new JsonWebTokenHandler();
+			JsonWebTokenHandler handler = new();
 			string accessToken = handler.CreateToken(accessTokenDescriptor);
 			string refreshToken = handler.CreateToken(refreshTokenDescriptor);
 
@@ -117,7 +117,8 @@ namespace WebAPI.Services.Authorization
 		private SecurityTokenDescriptor GetTokenDescriptor(int userId, DateTime expiresOn) =>
 			new()
 			{
-				Subject = new ClaimsIdentity([new Claim(JwtRegisteredClaimNames.NameId, userId.ToString())]),
+				Claims = new Dictionary<string, object>() {{ "nameid", userId }},
+				Subject = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())]),
 				Expires = expiresOn,
 				Issuer = appSettings.TokenIssuer,
 				Audience = appSettings.TokenAudience,
