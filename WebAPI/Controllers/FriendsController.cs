@@ -1,3 +1,4 @@
+using Application.DTOs.Friends;
 using Application.UseCases.Abstractions;
 using Application.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -21,5 +22,9 @@ namespace WebAPI.Controllers
 
 			return Ok();
 		}
+
+		[HttpGet]
+		public Task<IEnumerable<FriendDTO>> GetUserFriends() =>
+			friendshipService.GetUserFriendships(HttpContext.GetUserId());
 	}
 }
