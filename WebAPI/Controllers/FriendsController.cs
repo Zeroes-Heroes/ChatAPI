@@ -1,6 +1,8 @@
+using System.ComponentModel.DataAnnotations;
 using Application.DTOs.Friends;
 using Application.UseCases.Abstractions;
 using Application.Utilities;
+using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebAPI.Modules;
@@ -24,7 +26,11 @@ namespace WebAPI.Controllers
 		}
 
 		[HttpGet]
-		public Task<IEnumerable<FriendDTO>> GetUserFriends() =>
+		public Task<IEnumerable<FriendDTO>> GetUserFriendships() =>
 			friendshipService.GetUserFriendships(HttpContext.GetUserId());
+
+		[HttpPost("request/respond")]
+		public Task RespondToFriendRequest([Required] int friendUserId, [Required] FriendshipStatus status) =>
+			friendshipService.RespondToFriendRequest(friendUserId, HttpContext.GetUserId(), status);
 	}
 }
