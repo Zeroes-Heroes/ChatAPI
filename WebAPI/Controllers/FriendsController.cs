@@ -26,8 +26,8 @@ namespace WebAPI.Controllers
 		}
 
 		[HttpGet]
-		public Task<IEnumerable<FriendDTO>> GetUserFriendships() =>
-			friendshipService.GetUserFriendships(HttpContext.GetUserId());
+		public Task<IEnumerable<FriendDTO>> GetUserFriendships(FriendshipStatus? status) =>
+			friendshipService.GetUserFriendships(HttpContext.GetUserId(), status);
 
 		[HttpPost("request/respond")]
 		public Task RespondToFriendRequest([Required] int friendUserId, [Required] FriendshipStatus status) =>
