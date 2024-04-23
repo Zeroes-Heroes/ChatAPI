@@ -27,8 +27,8 @@ namespace Application.UseCases.Implementations
 			return Result.Success();
 		}
 
-		public Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null) =>
-			friendRepo.GetUserFriendships(userId, status);
+		public Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null) =>
+			friendRepo.GetUserFriendships(userId, status, isInitiator);
 
 		public Task RespondToFriendRequest(int senderUserId, int targetUserId, FriendshipStatus newStatus) =>
 			friendRepo.UpdateFriendshipStatus(senderUserId, targetUserId, newStatus);

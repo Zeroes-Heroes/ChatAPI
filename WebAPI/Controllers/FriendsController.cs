@@ -22,12 +22,12 @@ namespace WebAPI.Controllers
 			if (!result.IsSuccess)
 				return StatusCode(result.StatusCode, result.Error);
 
-			return Ok();
+			return StatusCode(result.StatusCode);
 		}
 
 		[HttpGet]
-		public Task<IEnumerable<FriendDTO>> GetUserFriendships(FriendshipStatus? status) =>
-			friendshipService.GetUserFriendships(HttpContext.GetUserId(), status);
+		public Task<IEnumerable<FriendDTO>> GetUserFriendships(FriendshipStatus? status, bool? isInitiator) =>
+			friendshipService.GetUserFriendships(HttpContext.GetUserId(), status, isInitiator);
 
 		[HttpPost("request/respond")]
 		public Task RespondToFriendRequest([Required] int friendUserId, [Required] FriendshipStatus status) =>

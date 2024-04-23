@@ -28,13 +28,18 @@ namespace Infrastructure.Repositoies
 						&& f.TargetUserId == targetUserId)
 				.ExecuteUpdateAsync(x => x.SetProperty(d => d.Status, newStatus));
 
-		public async Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null)
+		public async Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null)
 		{
 			IQueryable<Friendship> query = dbContext.Friendships
 				.Where(f => f.SenderUserId == userId || f.TargetUserId == userId);
 
 			if (status.HasValue)
 				query = query.Where(f => f.Status == status);	
+
+			if (isInitiator.HasValue)
+				query = query.Where(f => isInitiator.Value
+								? f.SenderUserId == userId
+								: f.TargetUserId == userId);
 
 			return await query.Select(friendship => new FriendDTO(
 

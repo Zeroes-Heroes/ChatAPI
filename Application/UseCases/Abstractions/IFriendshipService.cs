@@ -7,7 +7,7 @@ namespace Application.UseCases.Abstractions
 	public interface IFriendshipService
 	{
 		Task<Result> AddFriend(int senderUserId, string targetEmail);
-		Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null);
+		Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null);
 		Task RespondToFriendRequest(int senderUserId, int targetUserId, FriendshipStatus newStatus);
 	}
 }
