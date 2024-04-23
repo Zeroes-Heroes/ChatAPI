@@ -34,7 +34,7 @@ namespace Infrastructure.Repositoies
 				.Where(f => f.SenderUserId == userId || f.TargetUserId == userId);
 
 			if (status.HasValue)
-				query = query.Where(f => f.Status == status);
+				query = query.Where(f => f.Status == status);	
 
 			return await query.Select(friendship => new FriendDTO(
 
@@ -50,7 +50,10 @@ namespace Infrastructure.Repositoies
 						? friendship.Target!.Phone
 						: friendship.Sender!.Phone,
 
-					friendship.Status)).ToArrayAsync();
+					friendship.Status,
+
+					friendship.SenderUserId == userId))
+				.ToArrayAsync();
 		}
 	}
 }
