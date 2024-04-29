@@ -1,6 +1,6 @@
+using ChatAPI.Persistence.Database;
 using ChatAPI.WebAPI.Extensions;
 using ChatAPI.WebAPI.Hubs;
-using ChatAPI.Persistence.Database;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
