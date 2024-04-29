@@ -363,4 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 
 .env
-/WebAPI/appsettings.json
+/ChatAPI.WebAPI/appsettings.json
