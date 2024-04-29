@@ -10,7 +10,7 @@ services:
     image: ${DOCKER_REGISTRY-}chatserverapi
     build:
       context: .
-      dockerfile: ./WebAPI/Dockerfile
+      dockerfile: ./ChatAPI.WebAPI/Dockerfile
     deploy:
       resources:
         limits:

@@ -3,15 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34316.72
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Domain", "Domain\Domain.csproj", "{0BFCDF8E-4080-4936-9E44-2D0F6C2BC663}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ChatAPI.Domain", "ChatAPI.Domain\ChatAPI.Domain.csproj", "{0BFCDF8E-4080-4936-9E44-2D0F6C2BC663}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Application", "Application\Application.csproj", "{CA5A9A24-9579-4801-8A2A-96909C145FF3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ChatAPI.Application", "ChatAPI.Application\ChatAPI.Application.csproj", "{CA5A9A24-9579-4801-8A2A-96909C145FF3}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Infrastructure", "Infrastructure\Infrastructure.csproj", "{10BA4541-6066-437F-A93D-01CC2645957C}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ChatAPI.Infrastructure", "ChatAPI.Infrastructure\ChatAPI.Infrastructure.csproj", "{10BA4541-6066-437F-A93D-01CC2645957C}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebAPI", "WebAPI\WebAPI.csproj", "{62A8ABA7-F08F-45E7-92E6-8CDE3CE574A5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ChatAPI.WebAPI", "ChatAPI.WebAPI\ChatAPI.WebAPI.csproj", "{62A8ABA7-F08F-45E7-92E6-8CDE3CE574A5}"
 EndProject
-Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{5B2C7DC9-05D5-4B84-8D09-2FFA91AEE735}"
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "ChatAPI.Docker", "ChatAPI.Docker.dcproj", "{5B2C7DC9-05D5-4B84-8D09-2FFA91AEE735}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChatAPI.Persistence", "ChatAPI.Persistence\ChatAPI.Persistence.csproj", "{9FF7B7E0-015A-4274-B69A-0A8E15F2AD59}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{5B2C7DC9-05D5-4B84-8D09-2FFA91AEE735}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5B2C7DC9-05D5-4B84-8D09-2FFA91AEE735}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5B2C7DC9-05D5-4B84-8D09-2FFA91AEE735}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9FF7B7E0-015A-4274-B69A-0A8E15F2AD59}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9FF7B7E0-015A-4274-B69A-0A8E15F2AD59}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9FF7B7E0-015A-4274-B69A-0A8E15F2AD59}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9FF7B7E0-015A-4274-B69A-0A8E15F2AD59}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
