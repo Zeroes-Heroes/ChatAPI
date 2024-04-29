@@ -5,10 +5,18 @@ namespace ChatAPI.Domain.Entities
 {
 	public class UserDevice
 	{
+		public UserDevice(int userId, string deviceId, bool isVerified)
+		{
+			UserId = userId;
+			DeviceId = deviceId;
+			IsVerified = isVerified;
+			CreatedOn = DateTime.UtcNow;
+		}
+
 		public int Id { get; set; }
 
 		[Required]
-		public int UserId { get; set; }
+		public required int UserId { get; set; }
 
 		[Required]
 		public required string DeviceId { get; set; }

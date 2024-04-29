@@ -65,7 +65,6 @@ namespace ChatAPI.WebAPI.Extensions
 		public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration) =>
 			services.AddDbContextPool<AppDbContext>(options =>
 			{
-				using ServiceProvider provider = services.BuildServiceProvider();
 				options.UseNpgsql(configuration["DefaultConnection"]);
 				options.ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning));
 			});
