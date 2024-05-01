@@ -8,5 +8,6 @@ namespace ChatAPI.Application.UseCases.Abstractions
 		Task AddUser(UserRegisterDTO user);
 		Task<User?> GetUserByUserId(int userId);
 		Task<User?> GetUserByEmail(string email, bool trackEntity = true);
-	}
+        Task<User?> GetUserForLogin(UserLoginV2DTO loginCredentials, bool trackEntity = true);
+    }
 }

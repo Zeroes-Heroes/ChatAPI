@@ -8,6 +8,7 @@ namespace ChatAPI.Application.UseCases.Abstractions
 	{
 		Task Register(UserRegisterDTO dto);
 		Task<Result<TokensDTO>> Login(UserLoginDTO dto);
-		Task Logout(int userId);
+        Task<Result<TokensDTO>> LoginV2(UserLoginV2DTO dto);
+        Task Logout(int userId);
 	}
 }
