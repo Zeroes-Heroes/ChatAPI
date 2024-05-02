@@ -1,18 +1,18 @@
 ﻿using System.Security.Claims;
 using System.Text;
+using ChatAPI.Application.DTOs.Authorization;
 using ChatAPI.Application.UseCases.Abstractions;
+using ChatAPI.Infrastructure.Caching;
 using ChatAPI.WebAPI.Common;
 using ChatAPI.WebAPI.Services.Authorization.Enums;
-using ChatAPI.Infrastructure.Caching;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
-using ChatAPI.Application.DTOs.Authorization;
 
 namespace ChatAPI.WebAPI.Services.Authorization
 {
-    public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache cache) : ITokenService
+	public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache cache) : ITokenService
 	{
 		private const int AccessTokenTTL = 45;
 		private const int RefreshTokenTTL = 60;
@@ -117,7 +117,7 @@ namespace ChatAPI.WebAPI.Services.Authorization
 		private SecurityTokenDescriptor GetTokenDescriptor(int userId, DateTime expiresOn) =>
 			new()
 			{
-				Claims = new Dictionary<string, object>() {{ "nameid", userId }},
+				Claims = new Dictionary<string, object>() { { "nameid", userId } },
 				Subject = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())]),
 				Expires = expiresOn,
 				Issuer = appSettings.TokenIssuer,

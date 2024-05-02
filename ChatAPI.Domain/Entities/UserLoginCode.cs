@@ -5,16 +5,16 @@ namespace ChatAPI.Domain.Entities
 {
 	public class UserLoginCode
 	{
-        public UserLoginCode(int userId, Guid secretLoginCode)
-        {
-            UserId = userId;
+		public UserLoginCode(int userId, Guid secretLoginCode)
+		{
+			UserId = userId;
 			SecretLoginCode = secretLoginCode;
-        }
+		}
 
-        [Key]
+		[Key]
 		public int UserId { get; set; }
 		public Guid SecretLoginCode { get; set; }
-		
+
 		[ForeignKey(nameof(UserId))]
 		public virtual User? User { get; set; }
 	}

@@ -6,7 +6,7 @@ using ChatAPI.Domain.Entities;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-    public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
+	public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
 	{
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{
