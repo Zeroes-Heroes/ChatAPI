@@ -1,6 +1,5 @@
 ﻿using System.Security.Claims;
 using System.Text;
-using ChatAPI.Application.Models.Authorization;
 using ChatAPI.Application.UseCases.Abstractions;
 using ChatAPI.WebAPI.Common;
 using ChatAPI.WebAPI.Services.Authorization.Enums;
@@ -9,10 +8,11 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using ChatAPI.Application.DTOs.Authorization;
 
 namespace ChatAPI.WebAPI.Services.Authorization
 {
-	public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache cache) : ITokenService
+    public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache cache) : ITokenService
 	{
 		private const int AccessTokenTTL = 45;
 		private const int RefreshTokenTTL = 60;

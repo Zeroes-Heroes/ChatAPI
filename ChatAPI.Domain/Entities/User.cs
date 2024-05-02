@@ -2,26 +2,20 @@
 
 namespace ChatAPI.Domain.Entities
 {
-	public class User
+	public class User(string name, string phone)
 	{
-		public User(string name, string phone)
-		{
-			Name = name;
-			Phone = phone;
-			CreatedOn = DateTime.UtcNow;
-		}
-
 		public int Id { get; set; }
 
 		[Required]
-		public required string Name { get; set; }
+		public string Name { get; set; } = name;
 
 		[Required]
-		public required string Phone { get; set; }
+		public string Phone { get; set; } = phone;
 
 		[Required]
-		public DateTime CreatedOn { get; set; }
+		public DateTime CreatedOn { get; set; } = DateTime.UtcNow;
 
+		public virtual UserLoginCode? UserLoginCode { get; set; }
 		public virtual ICollection<UserDevice> UserDevices { get; set; }
     };
 }
