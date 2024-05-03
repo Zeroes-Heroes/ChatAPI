@@ -36,8 +36,6 @@ namespace ChatAPI.Application.UseCases.Implementations
 			if (dto.SmsVerificationCode != "000000")
 				return Result<SecretLoginCodeDTO>.Failure("Wrong sms verification code.");
 
-			Guid secretLoginCode = Guid.NewGuid();
-
 			user.UserDevices ??= new List<UserDevice>();
 			
 			UserDevice? userDevice = user.UserDevices.FirstOrDefault(ud => ud.DeviceId == dto.DeviceId);
@@ -50,6 +48,8 @@ namespace ChatAPI.Application.UseCases.Implementations
 				userDevice = new UserDevice(dto.DeviceId);
 				user.UserDevices.Add(userDevice);
 			}
+
+			Guid secretLoginCode = Guid.NewGuid();
 
 			userDevice.IsVerified = true;
 			userDevice.UserLoginCode = new(user.Id, secretLoginCode);

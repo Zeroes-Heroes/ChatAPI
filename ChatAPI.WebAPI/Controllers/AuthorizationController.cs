@@ -17,7 +17,7 @@ namespace ChatAPI.WebAPI.Controllers
 		{
 			Result result = await userService.Register(payload);
 
-			if (!result.IsSuccess)
+			if (result.IsSuccess)
 				return StatusCode(result.StatusCode);
 
 			return StatusCode(result.StatusCode, result.Error);
