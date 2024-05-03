@@ -26,9 +26,9 @@ namespace ChatAPI.WebAPI.Controllers
         /// <returns>Access and refresh tokens.</returns>
         [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<ActionResult<TokensDTO>> Login([FromBody] UserLoginDTO payload)
+        public async Task<ActionResult<UserLoginReturnDTO>> Login([FromBody] UserLoginDTO payload)
         {
-            Result<TokensDTO> result = await userService.Login(payload);
+            Result<UserLoginReturnDTO> result = await userService.Login(payload);
             if (result.IsSuccess)
                 return result.Data;
 

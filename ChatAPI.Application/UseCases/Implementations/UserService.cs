@@ -50,14 +50,14 @@ namespace ChatAPI.Application.UseCases.Implementations
         /// </summary>
         /// <param name="userDto">The login credentials.</param>
         /// <returns>Access and refresh tokens.</returns>
-        public async Task<Result<TokensDTO>> Login(UserLoginDTO userDto)
+        public async Task<Result<UserLoginReturnDTO>> Login(UserLoginDTO userDto)
         {
             User? entity = await userRepo.GetUserForLoginNoTracking(userDto);
 
             if (entity == null)
-                return Result<TokensDTO>.Failure("The login credentials are invalid.", HttpStatusCode.Unauthorized);
+                return Result<UserLoginReturnDTO>.Failure("The login credentials are invalid.", HttpStatusCode.Unauthorized);
 
-            return Result<TokensDTO>.Success(await tokenService.GenerateTokens(entity!.Id));
+            return Result<UserLoginReturnDTO>.Success(new(entity.Name, await tokenService.GenerateTokens(entity!.Id)));
         }
 
         public Task Logout(int userId) =>
