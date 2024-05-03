@@ -15,15 +15,22 @@ namespace ChatAPI.WebAPI.Controllers
 	{
 		[AllowAnonymous]
 		[HttpPost("register")]
-		public Task Register([FromBody] UserRegisterDTO payload) =>
-			userService.Register(payload);
+		public async Task<ActionResult> Register([FromBody] UserRegisterDTO payload)
+		{
+			Result result = await userService.Register(payload);
+
+			if (!result.IsSuccess)
+				return StatusCode(result.StatusCode);
+
+			return StatusCode(result.StatusCode, result.Error);
+		}
 
 		[AllowAnonymous]
 		[HttpPost("verify-sms-code")]
 		public async Task<ActionResult<SecretLoginCodeDTO>> VerifySmsCode([FromBody] VerifySmsCodeDTO code)
 		{
 			Result<SecretLoginCodeDTO> result = await userService.VerifySmsCode(code);
-		
+
 			if (result.IsSuccess)
 				return result.Data;
 

@@ -38,5 +38,12 @@ namespace ChatAPI.Persistence.Repositories
 
 		public Task<User?> GetUserByEmailAsNoTracking(string email) =>
 			dbContext.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Name == email);
+
+		/// <summary>
+		/// Returns whether or not a user with the given phone number exists in the database.
+		/// </summary>
+		/// <returns>True if the user exists or false if he doesn't.</returns>
+		public Task<bool> DoesUserExist(string phone) =>
+			dbContext.Users.AnyAsync(u => u.Phone == phone);
 	}
 }
