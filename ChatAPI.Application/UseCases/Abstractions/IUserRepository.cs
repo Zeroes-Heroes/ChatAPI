@@ -1,13 +1,15 @@
-﻿using ChatAPI.Application.DTOs.User;
+﻿using ChatAPI.Application.DTOs.Authorization;
 using ChatAPI.Domain.Entities;
 
 namespace ChatAPI.Application.UseCases.Abstractions
 {
-	public interface IUserRepository
-	{	
-		Task AddUser(UserRegisterDTO user);
+    public interface IUserRepository
+	{
+		void AddUser(UserRegisterDTO dto);
+		Task<User?> GetUserByEmailAsNoTracking(string email);
+		Task<UserDevice?> GetUserDeviceUserIncluded(string phone, string deviceId);
+		Task SaveChangesAsync();
 		Task<User?> GetUserByUserId(int userId);
-		Task<User?> GetUserByEmail(string email, bool trackEntity = true);
-        Task<User?> GetUserForLogin(UserLoginV2DTO loginCredentials, bool trackEntity = true);
+        Task<User?> GetUserForLogin(UserLoginV2DTO loginCredentials);
     }
 }

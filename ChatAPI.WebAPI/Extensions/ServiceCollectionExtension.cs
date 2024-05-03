@@ -2,7 +2,6 @@
 using System.Text;
 using ChatAPI.Application.UseCases.Abstractions;
 using ChatAPI.Application.UseCases.Implementations;
-using ChatAPI.Infrastructure.Adapters.Password;
 using ChatAPI.Persistence.Database;
 using ChatAPI.Persistence.Repositories;
 using ChatAPI.WebAPI.Common;
@@ -98,7 +97,7 @@ namespace ChatAPI.WebAPI.Extensions
 				{
 					ValidIssuer = configuration["TokenIssuer"],
 					ValidAudience = configuration["TokenAudience"],
-					IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["TokenSigningKey"])),
+					IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["TokenSigningKey"]!)),
 					ValidateIssuer = true,
 					ValidateAudience = true,
 					ValidateLifetime = true,
@@ -123,7 +122,6 @@ namespace ChatAPI.WebAPI.Extensions
 		/// <returns>IServiceCollection</returns>
 		public static IServiceCollection AddServices(this IServiceCollection services) =>
 			services
-				.AddTransient<IPasswordHasher, PasswordHasher>()
 				.AddTransient<ITokenService, TokenService>()
 				.AddScoped<IUserRepository, UserRepository>()
 				.AddScoped<IFriendshipRepository, FriendshipRepository>()

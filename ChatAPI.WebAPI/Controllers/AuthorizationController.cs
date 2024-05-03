@@ -1,5 +1,4 @@
-using ChatAPI.Application.DTOs.User;
-using ChatAPI.Application.Models.Authorization;
+using ChatAPI.Application.DTOs.Authorization;
 using ChatAPI.Application.UseCases.Abstractions;
 using ChatAPI.Application.Utilities;
 using ChatAPI.WebAPI.Models.User.Request;
@@ -19,18 +18,36 @@ namespace ChatAPI.WebAPI.Controllers
         public Task Register([FromBody] UserRegisterDTO payload) =>
             userService.Register(payload);
 
-        [AllowAnonymous]
-        [HttpPost("login")]
-        public async Task<ActionResult<TokensDTO>> Login([FromBody] UserLoginDTO payload)
-        {
-            Result<TokensDTO> result = await userService.Login(payload);
+		[AllowAnonymous]
+		[HttpPost("verify-sms-code")]
+		public async Task<ActionResult<SecretLoginCodeDTO>> VerifySmsCode([FromBody] VerifySmsCodeDTO code)
+		{
+			Result<SecretLoginCodeDTO> result = await userService.VerifySmsCode(code);
+		
+			if (result.IsSuccess)
+				return result.Data;
 
-            if (!result.IsSuccess)
-                return StatusCode(result.StatusCode, result.Error);
+			return StatusCode(result.StatusCode, result.Error);
+		}
 
-            return result.Data;
-        }
+		[AllowAnonymous]
+		[HttpPost("login")]
+		public async Task<ActionResult<TokensDTO>> Login([FromBody] UserLoginDTO payload)
+		{
+			Result<TokensDTO> result = await userService.Login(payload);
 
+			if (result.IsSuccess)
+				return result.Data;
+
+			return StatusCode(result.StatusCode, result.Error);
+		}
+
+		[Obsolete]
+		[HttpPost("tokens/refresh")]
+		public async Task<ActionResult<TokensDTO>> RefreshTokens([FromBody] RefreshTokenRequestModel payload)
+		{
+			if (!await tokenService.ValidateRefreshToken(payload.RefreshToken))
+				return Unauthorized();
         /// <summary>
         /// Logs in the user if the provided credentials are correct.
         /// The second version of the login method.
@@ -50,19 +67,10 @@ namespace ChatAPI.WebAPI.Controllers
             return result.Data;
         }
 
-        [HttpPost("tokens/refresh")]
-        public async Task<ActionResult<TokensDTO>> RefreshTokens([FromBody] RefreshTokenRequestModel payload)
-        {
-            if (!await tokenService.ValidateRefreshToken(payload.RefreshToken))
-                return Unauthorized();
 
-            int userId = HttpContext.GetUserId();
-            await userService.Logout(userId);
-            return await tokenService.GenerateTokens(userId);
-        }
-
-        [HttpPost("logout")]
-        public Task Logout() =>
-            userService.Logout(HttpContext.GetUserId());
-    }
+		[Obsolete]
+		[HttpPost("logout")]
+		public Task Logout() =>
+			userService.Logout(HttpContext.GetUserId());
+	}
 }

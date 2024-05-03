@@ -1,8 +1,8 @@
-﻿using ChatAPI.Application.Models.Authorization;
+﻿using ChatAPI.Application.DTOs.Authorization;
 
 namespace ChatAPI.Application.UseCases.Abstractions
 {
-	public interface ITokenService
+    public interface ITokenService
 	{
 		Task<TokensDTO> GenerateTokens(int userId);
 		Task RevokeTokens(int userId);
