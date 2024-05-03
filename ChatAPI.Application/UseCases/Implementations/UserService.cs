@@ -6,14 +6,14 @@ using ChatAPI.Domain.Entities;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-	public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
+	public class UserService(IUserRepository userRepo) : IUserService
 	{
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{
 			if (await userRepo.DoesUserExist(dto.Phone))
 				return Result.Failure("This number is already in use.");
 
-			userRepo.AddUser(dto);
+			userRepo.AddUserDevice(dto);
 			await userRepo.SaveChangesAsync();
 			return Result.Success(HttpStatusCode.Created);
 		}
@@ -27,32 +27,35 @@ namespace ChatAPI.Application.UseCases.Implementations
 		public async Task<Result<SecretLoginCodeDTO>> VerifySmsCode(VerifySmsCodeDTO dto)
 		{
 			// TODO with Twilio: send request to verify phone + code
+			User? user = await userRepo.GetUserWithUserDevicesIncluded(dto.Phone);
 
-			UserDevice? userDevice = await userRepo.GetUserDeviceUserIncluded(dto.Phone, dto.DeviceId);
+			if (user is null)
+				return Result<SecretLoginCodeDTO>.Failure("User with that phone is not found.", HttpStatusCode.NotFound);
 
-			if (userDevice is null)
-				return Result<SecretLoginCodeDTO>.Failure("Invalid phone and device id combination.");
-
-			// The following is a custom implementation until we actually implement Twilio
+			// The following is a custom implementation until we actually have Twilio
 			if (dto.SmsVerificationCode != "000000")
 				return Result<SecretLoginCodeDTO>.Failure("Wrong sms verification code.");
+
+			user.UserDevices ??= new List<UserDevice>();
+			
+			UserDevice? userDevice = user.UserDevices.FirstOrDefault(ud => ud.DeviceId == dto.DeviceId);
+
+			if (userDevice is not null && userDevice.IsVerified)
+				return Result<SecretLoginCodeDTO>.Failure("Device is already verified", HttpStatusCode.Forbidden);
+
+			if (userDevice is null)
+			{
+				userDevice = new UserDevice(dto.DeviceId);
+				user.UserDevices.Add(userDevice);
+			}
 
 			Guid secretLoginCode = Guid.NewGuid();
 
 			userDevice.IsVerified = true;
-			userDevice.User!.UserLoginCode = new(userDevice.UserId, secretLoginCode);
+			userDevice.UserLoginCode = new(user.Id, secretLoginCode);
 			await userRepo.SaveChangesAsync();
 
 			return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));
 		}
-
-		public async Task<Result<TokensDTO>> Login(UserLoginDTO userDto)
-		{
-			User? entity = await userRepo.GetUserByEmailAsNoTracking(userDto.Email);
-			return Result<TokensDTO>.Success(await tokenService.GenerateTokens(entity!.Id));
-		}
-
-		public Task Logout(int userId) =>
-			tokenService.RevokeTokens(userId);
 	}
 }

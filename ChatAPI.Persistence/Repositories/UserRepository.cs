@@ -12,7 +12,7 @@ namespace ChatAPI.Persistence.Repositories
 		/// Add a new user with a user device to the database.
 		/// </summary>
 		/// <param name="dto">A model containing information about the user and device</param>
-		public void AddUser(UserRegisterDTO dto)
+		public void AddUserDevice(UserRegisterDTO dto)
 		{
 			UserDevice userDevice = new UserDevice(
 				new User(dto.Name, dto.Phone),
@@ -22,16 +22,12 @@ namespace ChatAPI.Persistence.Repositories
 		}
 
 		/// <summary>
-		/// Gets the UserDevice entity by phone and device id
-		/// and includes the User entity of the same user with tracking
+		/// Gets the User entity by phone and includes the UserDevices entities of the same user with tracking
 		/// </summary>
-		/// <param name="phone"></param>
-		/// <param name="deviceId"></param>
-		/// <returns></returns>
-		public Task<UserDevice?> GetUserDeviceUserIncluded(string phone, string deviceId) =>
-			dbContext.UserDevices
-				.Include(ud => ud.User)
-				.Where(d => d.DeviceId == deviceId && d.User.Phone == phone)
+		public Task<User?> GetUserWithUserDevicesIncluded(string phone) =>
+			dbContext.Users
+				.Include(u => u.UserDevices)
+				.Where(u => u.Phone == phone)
 				.FirstOrDefaultAsync();
 
 		public Task SaveChangesAsync() => dbContext.SaveChangesAsync();
@@ -45,5 +41,8 @@ namespace ChatAPI.Persistence.Repositories
 		/// <returns>True if the user exists or false if he doesn't.</returns>
 		public Task<bool> DoesUserExist(string phone) =>
 			dbContext.Users.AnyAsync(u => u.Phone == phone);
+		
+		public Task<User?> GetUser(string phone) =>
+			dbContext.Users.FirstOrDefaultAsync(u => u.Phone == phone);
 	}
 }

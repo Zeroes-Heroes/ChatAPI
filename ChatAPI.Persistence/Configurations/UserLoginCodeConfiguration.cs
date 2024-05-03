@@ -10,18 +10,18 @@ namespace ChatAPI.Persistence.Configurations
 		{
 			builder.ToTable("UserLoginCodes");
 
-			builder.HasKey(e => e.UserId);
+			builder.HasKey(e => e.UserDeviceId);
 
 			builder.Property(e => e.SecretLoginCode)
 				.IsRequired()
 				.HasMaxLength(36);
 
 			builder
-				.HasOne(e => e.User)
+				.HasOne(e => e.UserDevice)
 				.WithOne(e => e.UserLoginCode)
-				.HasForeignKey<UserLoginCode>(e => e.UserId)
-				.HasPrincipalKey<User>(e => e.Id)
-				.HasConstraintName("FK_UserLoginCodes_UserId_Users_Id");
+				.HasForeignKey<UserLoginCode>(e => e.UserDeviceId)
+				.HasPrincipalKey<UserDevice>(e => e.Id)
+				.HasConstraintName("FK_UserLoginCodes_UserDeviceId_UserDevices_Id");
 		}
 	}
 }
