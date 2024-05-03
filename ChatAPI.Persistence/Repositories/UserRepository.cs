@@ -28,7 +28,7 @@ namespace ChatAPI.Persistence.Repositories
 		/// <param name="phone"></param>
 		/// <param name="deviceId"></param>
 		/// <returns></returns>
-		public Task<UserDevice?> GetUserDeviceByDeviceIdAndPhoneWithUserIncluded(string phone, string deviceId) =>
+		public Task<UserDevice?> GetUserDeviceUserIncluded(string phone, string deviceId) =>
 			dbContext.UserDevices
 				.Include(ud => ud.User)
 				.Where(d => d.DeviceId == deviceId && d.User.Phone == phone)

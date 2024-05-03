@@ -36,6 +36,6 @@ namespace ChatAPI.Domain.Entities
 		public DateTime CreatedOn { get; set; }
 
 		[ForeignKey(nameof(UserId))]
-		public virtual User User { get; set; }
+		public virtual User? User { get; set; }
 	}
 }

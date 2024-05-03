@@ -25,7 +25,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 		{
 			// TODO with Twilio: send request to verify phone + code
 
-			UserDevice? userDevice = await userRepo.GetUserDeviceByDeviceIdAndPhoneWithUserIncluded(dto.Phone, dto.DeviceId);
+			UserDevice? userDevice = await userRepo.GetUserDeviceUserIncluded(dto.Phone, dto.DeviceId);
 
 			if (userDevice is null)
 				return Result<SecretLoginCodeDTO>.Failure("Invalid phone and device id combination.");
@@ -37,7 +37,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			Guid secretLoginCode = Guid.NewGuid();
 
 			userDevice.IsVerified = true;
-			userDevice.User.UserLoginCode = new(userDevice.UserId, secretLoginCode);
+			userDevice.User!.UserLoginCode = new(userDevice.UserId, secretLoginCode);
 			await userRepo.SaveChangesAsync();
 
 			return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));

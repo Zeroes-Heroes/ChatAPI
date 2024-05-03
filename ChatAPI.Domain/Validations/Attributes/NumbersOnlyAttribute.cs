@@ -2,7 +2,6 @@
 using System.Text.RegularExpressions;
 
 namespace ChatAPI.Domain.Validations.Attributes;
-
 public class NumbersOnlyAttribute : ValidationAttribute
 {
 	private static readonly string pattern = @"^[0-9]+$";
