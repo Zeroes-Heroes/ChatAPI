@@ -9,7 +9,7 @@ namespace ChatAPI.Application.UseCases.Abstractions
 		Task<User?> GetUser(string phone);
 		Task<User?> GetUserWithUserDevicesIncluded(string phone);
 		Task<bool> DoesUserExist(string phone);
-		Task<User?> GetUserForLoginNoTracking(UserLoginDTO loginCredentials);
+		Task<User?> GetUserNoTracking(UserLoginDTO loginCredentials);
 		Task SaveChangesAsync();
 	}
 }

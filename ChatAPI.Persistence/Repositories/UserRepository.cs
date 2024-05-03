@@ -51,7 +51,7 @@ namespace ChatAPI.Persistence.Repositories
 		/// </summary>
 		/// <param name="dto">The credentials that will be used to check if the user exists.</param>
 		/// <returns>The entity corresponding to the given credentials or null if there isn't one.</returns>
-		public Task<User?> GetUserForLoginNoTracking(UserLoginDTO dto) =>
+		public Task<User?> GetUserNoTracking(UserLoginDTO dto) =>
 			dbContext.UserDevices
 				.Where(ud => ud.DeviceId == dto.DeviceId
 					&& ud.User!.Phone == dto.Phone

@@ -61,18 +61,17 @@ namespace ChatAPI.Application.UseCases.Implementations
 		/// <summary>
 		/// Used to verify the users credentials. 
 		/// Generates access and refresh tokens.
-		/// The second version of the login method.
 		/// </summary>
-		/// <param name="userDto">The login credentials.</param>
-		/// <returns>Access and refresh tokens.</returns>
-		public async Task<Result<UserLoginResponseDTO>> Login(UserLoginDTO userDto)
+		/// <param name="dto">The login credentials.</param>
+		/// <returns>Access, refresh tokens and the name of the user.</returns>
+		public async Task<Result<UserLoginResponseDTO>> Login(UserLoginDTO dto)
 		{
-			User? entity = await userRepo.GetUserForLoginNoTracking(userDto);
+			User? user = await userRepo.GetUserNoTracking(dto);
 
-			if (entity == null)
+			if (user is null)
 				return Result<UserLoginResponseDTO>.Failure("The login credentials are invalid.", HttpStatusCode.Unauthorized);
 
-			return Result<UserLoginResponseDTO>.Success(new(entity.Name, await tokenService.GenerateTokens(entity!.Id)));
+			return Result<UserLoginResponseDTO>.Success(new(user.Name, await tokenService.GenerateTokens(user!.Id)));
 		}
 	}
 }
