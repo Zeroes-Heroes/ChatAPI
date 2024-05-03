@@ -1,4 +1,4 @@
 ﻿namespace ChatAPI.Application.DTOs.Authorization
 {
-    public record UserLoginDTO(string Email, string Password);
+	public record UserLoginDTO(string Phone, string DeviceId, Guid SecretLoginCode);
 }

@@ -41,8 +41,22 @@ namespace ChatAPI.Persistence.Repositories
 		/// <returns>True if the user exists or false if he doesn't.</returns>
 		public Task<bool> DoesUserExist(string phone) =>
 			dbContext.Users.AnyAsync(u => u.Phone == phone);
-		
+
 		public Task<User?> GetUser(string phone) =>
 			dbContext.Users.FirstOrDefaultAsync(u => u.Phone == phone);
+
+		/// <summary>
+		/// Gets the user by the given credentials.
+		/// If one of the properties does not match, no entity is returned.
+		/// </summary>
+		/// <param name="dto">The credentials that will be used to check if the user exists.</param>
+		/// <returns>The entity corresponding to the given credentials or null if there isn't one.</returns>
+		public Task<User?> GetUserNoTracking(UserLoginDTO dto) =>
+			dbContext.UserDevices
+				.Where(ud => ud.DeviceId == dto.DeviceId
+					&& ud.User!.Phone == dto.Phone
+					&& ud.UserLoginCode!.SecretLoginCode == dto.SecretLoginCode)
+				.Select(ud => ud.User)
+				.FirstOrDefaultAsync();
 	}
 }

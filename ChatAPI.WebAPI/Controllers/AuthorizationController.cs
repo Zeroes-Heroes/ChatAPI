@@ -34,5 +34,22 @@ namespace ChatAPI.WebAPI.Controllers
 
 			return StatusCode(result.StatusCode, result.Error);
 		}
+
+		/// <summary>
+		/// Logs in the user if the provided credentials are correct.
+		/// Returns the access and refresh tokens.
+		/// </summary>
+		/// <param name="payload">Login credentials.</param>
+		/// <returns>Access and refresh tokens.</returns>
+		[AllowAnonymous]
+		[HttpPost("login")]
+		public async Task<ActionResult<UserLoginResponseDTO>> Login([FromBody] UserLoginDTO payload)
+		{
+			Result<UserLoginResponseDTO> result = await userService.Login(payload);
+			if (result.IsSuccess)
+				return result.Data;
+
+			return StatusCode(result.StatusCode, result.Error);
+		}
 	}
 }

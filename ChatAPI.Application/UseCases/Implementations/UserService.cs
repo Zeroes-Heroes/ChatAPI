@@ -1,12 +1,12 @@
-﻿using System.Net;
-using ChatAPI.Application.DTOs.Authorization;
+﻿using ChatAPI.Application.DTOs.Authorization;
 using ChatAPI.Application.UseCases.Abstractions;
 using ChatAPI.Application.Utilities;
 using ChatAPI.Domain.Entities;
+using System.Net;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-	public class UserService(IUserRepository userRepo) : IUserService
+	public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
 	{
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{
@@ -37,7 +37,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 				return Result<SecretLoginCodeDTO>.Failure("Wrong sms verification code.");
 
 			user.UserDevices ??= new List<UserDevice>();
-			
+
 			UserDevice? userDevice = user.UserDevices.FirstOrDefault(ud => ud.DeviceId == dto.DeviceId);
 
 			if (userDevice is not null && userDevice.IsVerified)
@@ -56,6 +56,22 @@ namespace ChatAPI.Application.UseCases.Implementations
 			await userRepo.SaveChangesAsync();
 
 			return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));
+		}
+
+		/// <summary>
+		/// Used to verify the users credentials. 
+		/// Generates access and refresh tokens.
+		/// </summary>
+		/// <param name="dto">The login credentials.</param>
+		/// <returns>Access, refresh tokens and the name of the user.</returns>
+		public async Task<Result<UserLoginResponseDTO>> Login(UserLoginDTO dto)
+		{
+			User? user = await userRepo.GetUserNoTracking(dto);
+
+			if (user is null)
+				return Result<UserLoginResponseDTO>.Failure("The login credentials are invalid.", HttpStatusCode.Unauthorized);
+
+			return Result<UserLoginResponseDTO>.Success(new(user.Name, await tokenService.GenerateTokens(user!.Id)));
 		}
 	}
 }
