@@ -8,6 +8,7 @@ namespace ChatAPI.Application.UseCases.Abstractions
 		void AddUser(UserRegisterDTO dto);
 		Task<User?> GetUserByEmailAsNoTracking(string email);
 		Task<UserDevice?> GetUserDeviceUserIncluded(string phone, string deviceId);
+		Task<bool> DoesUserExist(string phone);
 		Task SaveChangesAsync();
 	}
 }

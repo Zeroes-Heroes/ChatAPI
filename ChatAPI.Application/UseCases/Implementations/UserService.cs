@@ -10,6 +10,9 @@ namespace ChatAPI.Application.UseCases.Implementations
 	{
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{
+			if (await userRepo.DoesUserExist(dto.Phone))
+				return Result.Failure("This number is already in use.");
+
 			userRepo.AddUser(dto);
 			await userRepo.SaveChangesAsync();
 			return Result.Success(HttpStatusCode.Created);
