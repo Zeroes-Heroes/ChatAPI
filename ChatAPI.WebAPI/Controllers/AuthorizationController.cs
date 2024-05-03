@@ -6,33 +6,50 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ChatAPI.WebAPI.Controllers
 {
-	[ApiController]
-	[Route("[controller]")]
-	[Authorize]
-	public class AuthorizationController(IUserService userService) : ControllerBase
-	{
-		[AllowAnonymous]
-		[HttpPost("register")]
-		public async Task<ActionResult> Register([FromBody] UserRegisterDTO payload)
-		{
-			Result result = await userService.Register(payload);
+    [ApiController]
+    [Route("[controller]")]
+    [Authorize]
+    public class AuthorizationController(IUserService userService) : ControllerBase
+    {
+        [AllowAnonymous]
+        [HttpPost("register")]
+        public async Task<ActionResult> Register([FromBody] UserRegisterDTO payload)
+        {
+            Result result = await userService.Register(payload);
 
-			if (result.IsSuccess)
-				return StatusCode(result.StatusCode);
+            if (result.IsSuccess)
+                return StatusCode(result.StatusCode);
 
-			return StatusCode(result.StatusCode, result.Error);
-		}
+            return StatusCode(result.StatusCode, result.Error);
+        }
 
-		[AllowAnonymous]
-		[HttpPost("verify-sms-code")]
-		public async Task<ActionResult<SecretLoginCodeDTO>> VerifySmsCode([FromBody] VerifySmsCodeDTO code)
-		{
-			Result<SecretLoginCodeDTO> result = await userService.VerifySmsCode(code);
+        [AllowAnonymous]
+        [HttpPost("verify-sms-code")]
+        public async Task<ActionResult<SecretLoginCodeDTO>> VerifySmsCode([FromBody] VerifySmsCodeDTO code)
+        {
+            Result<SecretLoginCodeDTO> result = await userService.VerifySmsCode(code);
 
-			if (result.IsSuccess)
-				return result.Data;
+            if (result.IsSuccess)
+                return result.Data;
 
-			return StatusCode(result.StatusCode, result.Error);
-		}
-	}
+            return StatusCode(result.StatusCode, result.Error);
+        }
+
+        /// <summary>
+        /// Logs in the user if the provided credentials are correct.
+        /// Returns the access and refresh tokens.
+        /// </summary>
+        /// <param name="payload">Login credentials.</param>
+        /// <returns>Access and refresh tokens.</returns>
+        [AllowAnonymous]
+        [HttpPost("login")]
+        public async Task<ActionResult<UserLoginResponseDTO>> Login([FromBody] UserLoginDTO payload)
+        {
+            Result<UserLoginResponseDTO> result = await userService.Login(payload);
+            if (result.IsSuccess)
+                return result.Data;
+
+            return StatusCode(result.StatusCode, result.Error);
+        }
+    }
 }

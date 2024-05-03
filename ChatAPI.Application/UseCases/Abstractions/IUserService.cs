@@ -7,5 +7,6 @@ namespace ChatAPI.Application.UseCases.Abstractions
 	{
 		Task<Result> Register(UserRegisterDTO dto);
 		Task<Result<SecretLoginCodeDTO>> VerifySmsCode(VerifySmsCodeDTO code);
-	}
+        Task<Result<UserLoginResponseDTO>> Login(UserLoginDTO dto);
+    }
 }
