@@ -15,9 +15,9 @@ namespace ChatAPI.WebAPI.Controllers
 	public class FriendsController(IFriendshipService friendshipService) : ControllerBase
 	{
 		[HttpPost("add/{targetEmail}")]
-		public async Task<IActionResult> AddFriend([FromRoute] string targetEmail)
+		public async Task<IActionResult> AddFriend([FromRoute] string targetPhone)
 		{
-			Result result = await friendshipService.AddFriend(HttpContext.GetUserId(), targetEmail);
+			Result result = await friendshipService.AddFriend(HttpContext.GetUserId(), targetPhone);
 
 			if (!result.IsSuccess)
 				return StatusCode(result.StatusCode, result.Error);

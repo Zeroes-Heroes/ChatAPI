@@ -8,9 +8,9 @@ namespace ChatAPI.Application.UseCases.Implementations
 {
 	public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo) : IFriendshipService
 	{
-		public async Task<Result> AddFriend(int senderUserId, string targetEmail)
+		public async Task<Result> AddFriend(int senderUserId, string phone)
 		{
-			User? targetUser = await userRepo.GetUserByEmailAsNoTracking(targetEmail);
+			User? targetUser = await userRepo.GetUser(phone);
 
 			if (targetUser is null)
 				return Result.Failure("User with that email is not found.");

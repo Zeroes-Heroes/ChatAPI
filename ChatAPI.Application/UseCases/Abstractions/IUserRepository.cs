@@ -5,9 +5,9 @@ namespace ChatAPI.Application.UseCases.Abstractions
 {
     public interface IUserRepository
 	{
-		void AddUser(UserRegisterDTO dto);
-		Task<User?> GetUserByEmailAsNoTracking(string email);
-		Task<UserDevice?> GetUserDeviceUserIncluded(string phone, string deviceId);
+		void AddUserDevice(UserRegisterDTO dto);
+		Task<User?> GetUser(string phone);
+		Task<User?> GetUserWithUserDevicesIncluded(string phone);
 		Task<bool> DoesUserExist(string phone);
 		Task SaveChangesAsync();
 	}

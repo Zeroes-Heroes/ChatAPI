@@ -5,23 +5,21 @@ namespace ChatAPI.Domain.Entities
 {
 	public class UserDevice
 	{
-		public UserDevice(int userId, string deviceId, bool isVerified)
+		public UserDevice(string deviceId)
 		{
-			UserId = userId;
 			DeviceId = deviceId;
-			IsVerified = isVerified;
 			CreatedOn = DateTime.UtcNow;
 		}
 
-        public UserDevice(User user, string deviceId)
-        {
-            User = user;
+		public UserDevice(User user, string deviceId)
+		{
+			User = user;
 			DeviceId = deviceId;
 			IsVerified = false;
 			CreatedOn = DateTime.UtcNow;
-        }
+		}
 
-        public int Id { get; set; }
+		public int Id { get; set; }
 
 		[Required]
 		public int UserId { get; set; }
@@ -37,5 +35,6 @@ namespace ChatAPI.Domain.Entities
 
 		[ForeignKey(nameof(UserId))]
 		public virtual User? User { get; set; }
+		public virtual UserLoginCode? UserLoginCode { get; set; }
 	}
 }
