@@ -6,10 +6,10 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Development
 WORKDIR /src
-COPY ["./ChatAPI.WebAPI/WebAPI.csproj", "ChatAPI.WebAPI/"]
-COPY ["./ChatAPI.Infrastructure/Infrastructure.csproj", "ChatAPI.Infrastructure/"]
-COPY ["./ChatAPI.Domain/Domain.csproj", "ChatAPI.Domain/"]
-COPY ["./ChatAPI.Application/Application.csproj", "ChatAPI.Application/"]
+COPY ["./ChatAPI.WebAPI/ChatAPI.WebAPI.csproj", "ChatAPI.WebAPI/"]
+COPY ["./ChatAPI.Infrastructure/ChatAPI.Infrastructure.csproj", "ChatAPI.Infrastructure/"]
+COPY ["./ChatAPI.Domain/ChatAPI.Domain.csproj", "ChatAPI.Domain/"]
+COPY ["./ChatAPI.Application/ChatAPI.Application.csproj", "ChatAPI.Application/"]
 
 RUN dotnet restore "./ChatAPI.WebAPI/ChatAPI.WebAPI.csproj"
 COPY . .
