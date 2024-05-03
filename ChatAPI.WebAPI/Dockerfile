@@ -7,9 +7,9 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Development
 WORKDIR /src
 COPY ["./ChatAPI.WebAPI/WebAPI.csproj", "ChatAPI.WebAPI/"]
-COPY ["./Infrastructure/Infrastructure.csproj", "Infrastructure/"]
-COPY ["./Domain/Domain.csproj", "Domain/"]
-COPY ["./Application/Application.csproj", "Application/"]
+COPY ["./ChatAPI.Infrastructure/Infrastructure.csproj", "ChatAPI.Infrastructure/"]
+COPY ["./ChatAPI.Domain/Domain.csproj", "ChatAPI.Domain/"]
+COPY ["./ChatAPI.Application/Application.csproj", "ChatAPI.Application/"]
 
 RUN dotnet restore "./ChatAPI.WebAPI/ChatAPI.WebAPI.csproj"
 COPY . .
