@@ -10,7 +10,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 	{
 		public async Task<Result> AddFriend(int senderUserId, string targetEmail)
 		{
-			User? targetUser = await userRepo.GetUserByEmail(targetEmail, trackEntity: false);
+			User? targetUser = await userRepo.GetUserByEmailAsNoTracking(targetEmail);
 
 			if (targetUser is null)
 				return Result.Failure("User with that email is not found.");
