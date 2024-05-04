@@ -1,32 +1,36 @@
 ﻿using ChatAPI.Application.DTOs.Friends;
-using ChatAPI.Application.UseCases.Abstractions;
 using ChatAPI.Domain.Entities;
 using ChatAPI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using ChatAPI.Persistence.Database;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
 
 namespace ChatAPI.Persistence.Repositories
 {
-	public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepository
+    public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepository
 	{
-		public async Task AddFriendship(int senderUserId, int targetUserId)
+		public void AddFriendship(int senderUserId, int targetUserId)
 		{
 			Friendship friendship = new(senderUserId, targetUserId);
 			dbContext.Friendships.Add(friendship);
-			await dbContext.SaveChangesAsync();
 		}
 
-		public Task<Friendship?> GetFriendshipByUserIds(int[] userIds) =>
-			dbContext.Friendships
-				.Where(f => userIds.Contains(f.SenderUserId)
-						&& userIds.Contains(f.TargetUserId))
-				.FirstOrDefaultAsync();
-
-		public Task UpdateFriendshipStatus(int senderUserId, int targetUserId, FriendshipStatus newStatus) =>
+		public Task<Friendship?> GetSpecificFriendshipByUserIds(int senderUserId, int targetUserId) =>
 			dbContext.Friendships
 				.Where(f => f.SenderUserId == senderUserId
-						&& f.TargetUserId == targetUserId)
-				.ExecuteUpdateAsync(x => x.SetProperty(d => d.Status, newStatus));
+						 && f.TargetUserId == targetUserId)
+				.FirstOrDefaultAsync();
+
+		/// <summary>
+		/// Gets any friendship for the two given user id's
+		/// regardless who is the sender and who is the target.
+		/// </summary>
+		/// <param name="userIds">Sender and target user ids</param>
+		public Task<Friendship?> GetAnyFriendshipByUserIds(params int[] userIds) =>
+			dbContext.Friendships
+				.Where(f => userIds.Contains(f.SenderUserId)
+						 && userIds.Contains(f.TargetUserId))
+				.FirstOrDefaultAsync();
 
 		public async Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null)
 		{
@@ -60,5 +64,8 @@ namespace ChatAPI.Persistence.Repositories
 					friendship.SenderUserId == userId))
 				.ToArrayAsync();
 		}
+
+		public Task SaveChangesAsync() =>
+			dbContext.SaveChangesAsync();
 	}
 }

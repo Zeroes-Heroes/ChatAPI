@@ -18,6 +18,7 @@ namespace ChatAPI.Persistence.Database
 			modelBuilder.ApplyConfiguration(new UserConfiguration());
 			modelBuilder.ApplyConfiguration(new UserDeviceConfiguration());
 			modelBuilder.ApplyConfiguration(new UserLoginCodeConfiguration());
+			modelBuilder.ApplyConfiguration(new FriendshipConfiguration());
 		}
 	}
 }

@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ChatAPI.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20240502211142_AddUserLoginCodesTable")]
-    partial class AddUserLoginCodesTable
+    [Migration("20240504224303_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -31,7 +31,7 @@ namespace ChatAPI.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedOn")
                         .HasColumnType("timestamp with time zone");
@@ -45,13 +45,18 @@ namespace ChatAPI.Persistence.Migrations
                     b.Property<int>("TargetUserId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SenderUserId");
 
                     b.HasIndex("TargetUserId");
 
-                    b.ToTable("Friendships");
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Friendships", (string)null);
                 });
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.User", b =>
@@ -111,14 +116,14 @@ namespace ChatAPI.Persistence.Migrations
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.UserLoginCode", b =>
                 {
-                    b.Property<int>("UserId")
+                    b.Property<int>("UserDeviceId")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("SecretLoginCode")
                         .HasMaxLength(36)
                         .HasColumnType("uuid");
 
-                    b.HasKey("UserId");
+                    b.HasKey("UserDeviceId");
 
                     b.ToTable("UserLoginCodes", (string)null);
                 });
@@ -126,16 +131,22 @@ namespace ChatAPI.Persistence.Migrations
             modelBuilder.Entity("ChatAPI.Domain.Entities.Friendship", b =>
                 {
                     b.HasOne("ChatAPI.Domain.Entities.User", "Sender")
-                        .WithMany()
+                        .WithMany("SentFriendships")
                         .HasForeignKey("SenderUserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("FK_Friendships_SenderUserId_Users_Id");
 
                     b.HasOne("ChatAPI.Domain.Entities.User", "Target")
-                        .WithMany()
+                        .WithMany("ReceivedFriendships")
                         .HasForeignKey("TargetUserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("FK_Friendships_TargetUserId_Users_Id");
+
+                    b.HasOne("ChatAPI.Domain.Entities.User", null)
+                        .WithMany("Friendships")
+                        .HasForeignKey("UserId");
 
                     b.Navigation("Sender");
 
@@ -156,20 +167,29 @@ namespace ChatAPI.Persistence.Migrations
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.UserLoginCode", b =>
                 {
-                    b.HasOne("ChatAPI.Domain.Entities.User", "User")
+                    b.HasOne("ChatAPI.Domain.Entities.UserDevice", "UserDevice")
                         .WithOne("UserLoginCode")
-                        .HasForeignKey("ChatAPI.Domain.Entities.UserLoginCode", "UserId")
+                        .HasForeignKey("ChatAPI.Domain.Entities.UserLoginCode", "UserDeviceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("FK_UserLoginCodes_UserId_Users_Id");
+                        .HasConstraintName("FK_UserLoginCodes_UserDeviceId_UserDevices_Id");
 
-                    b.Navigation("User");
+                    b.Navigation("UserDevice");
                 });
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.User", b =>
                 {
-                    b.Navigation("UserDevices");
+                    b.Navigation("Friendships");
 
+                    b.Navigation("ReceivedFriendships");
+
+                    b.Navigation("SentFriendships");
+
+                    b.Navigation("UserDevices");
+                });
+
+            modelBuilder.Entity("ChatAPI.Domain.Entities.UserDevice", b =>
+                {
                     b.Navigation("UserLoginCode");
                 });
 #pragma warning restore 612, 618

@@ -1,12 +1,17 @@
-﻿using ChatAPI.Application.DTOs.Friends;
-using ChatAPI.Application.UseCases.Abstractions;
+﻿using System.Net;
+using ChatAPI.Application.DTOs.Friends;
+using ChatAPI.Application.Hubs;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
+using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.Utilities;
 using ChatAPI.Domain.Entities;
 using ChatAPI.Domain.Enums;
+using ChatAPI.Domain.LiveConnections;
+using Microsoft.AspNetCore.SignalR;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-	public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo) : IFriendshipService
+	public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext) : IFriendshipService
 	{
 		/// <summary>
 		/// Creates a friendship between two parties with status 'pending'.
@@ -15,20 +20,33 @@ namespace ChatAPI.Application.UseCases.Implementations
 		/// <param name="phone">The receiver's phone number. </param>
 		public async Task<Result> AddFriend(int senderUserId, string phone)
 		{
-			User? targetUser = await userRepo.GetUser(phone);
+			User? targetUser = await userRepo.GetUserNoTracking(phone);
 
 			if (targetUser is null)
-				return Result.Failure("User with that phone is not found.");
+				return Result.Failure("User with that phone is not found.", HttpStatusCode.NotFound);
 
 			if (senderUserId == targetUser.Id)
 				return Result.Failure("You cannot add yourself as a friend.");
 
-			Friendship? friendship = await friendRepo.GetFriendshipByUserIds([senderUserId, targetUser.Id]);
+			Friendship? friendship = await friendRepo.GetAnyFriendshipByUserIds([senderUserId, targetUser.Id]);
 
 			if (friendship is not null)
-				return Result.Failure("You are already friends with that user.");
+				return Result.Failure("You already have relations with this user.", HttpStatusCode.Conflict);
 
-			await friendRepo.AddFriendship(senderUserId, targetUser.Id);
+			friendRepo.AddFriendship(senderUserId, targetUser.Id);
+			await friendRepo.SaveChangesAsync();
+
+			User senderUser = (await userRepo.GetUserNoTracking(senderUserId))!;
+
+			// Send a notification (event) to the targeted user (receiver of the friend request).
+			await hubContext.Clients
+				.User(targetUser.Id.ToString())
+				.SendAsync(
+					LiveEvents.NewFriendRequest,
+					senderUserId,
+					senderUser.Phone,
+					senderUser.Name);
+
 			return Result.Success();
 		}
 
@@ -47,7 +65,23 @@ namespace ChatAPI.Application.UseCases.Implementations
 		/// <param name="senderUserId">The id of the user who sent the friend request.</param>
 		/// <param name="targetUserId">The targeted user id (receiver).</param>
 		/// <param name="newStatus">The status to update with.</param>
-		public Task RespondToFriendRequest(int senderUserId, int targetUserId, FriendshipStatus newStatus) =>
-			friendRepo.UpdateFriendshipStatus(senderUserId, targetUserId, newStatus);
+		public async Task<Result> RespondToFriendRequest(int senderUserId, int targetUserId, FriendshipStatus newStatus)
+		{
+			Friendship? friendship = await friendRepo.GetSpecificFriendshipByUserIds(senderUserId, targetUserId);
+
+			if (friendship is null)
+				return Result.Failure("Could not find a friend request.", HttpStatusCode.NotFound);
+
+			if (newStatus is FriendshipStatus.Pending)
+				return Result.Failure("You cannot change the status to pending.", HttpStatusCode.Forbidden);
+
+			/******** [CHAT-23] History of Friendship updates ********/
+
+			//if (friendship.Status is FriendshipStatus.Blocked or FriendshipStatus.Rejected &&
+			//	friendship.ModifiedBy == senderUserId)
+			//	return Result.Failure("You cannot change the status.", HttpStatusCode.Forbidden);
+
+			return Result.Success();
+		}
 	}
 }

@@ -32,27 +32,33 @@ namespace ChatAPI.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityAlwaysColumn),
                     SenderUserId = table.Column<int>(type: "integer", nullable: false),
                     TargetUserId = table.Column<int>(type: "integer", nullable: false),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    CreatedOn = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    CreatedOn = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UserId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Friendships", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Friendships_Users_SenderUserId",
+                        name: "FK_Friendships_SenderUserId_Users_Id",
                         column: x => x.SenderUserId,
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_Friendships_Users_TargetUserId",
+                        name: "FK_Friendships_TargetUserId_Users_Id",
                         column: x => x.TargetUserId,
                         principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Friendships_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -77,6 +83,24 @@ namespace ChatAPI.Persistence.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "UserLoginCodes",
+                columns: table => new
+                {
+                    UserDeviceId = table.Column<int>(type: "integer", nullable: false),
+                    SecretLoginCode = table.Column<Guid>(type: "uuid", maxLength: 36, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserLoginCodes", x => x.UserDeviceId);
+                    table.ForeignKey(
+                        name: "FK_UserLoginCodes_UserDeviceId_UserDevices_Id",
+                        column: x => x.UserDeviceId,
+                        principalTable: "UserDevices",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_Friendships_SenderUserId",
                 table: "Friendships",
@@ -86,6 +110,11 @@ namespace ChatAPI.Persistence.Migrations
                 name: "IX_Friendships_TargetUserId",
                 table: "Friendships",
                 column: "TargetUserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Friendships_UserId",
+                table: "Friendships",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserDevices_UserId",
@@ -98,6 +127,9 @@ namespace ChatAPI.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "Friendships");
+
+            migrationBuilder.DropTable(
+                name: "UserLoginCodes");
 
             migrationBuilder.DropTable(
                 name: "UserDevices");

@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using System.Text;
-using ChatAPI.Application.UseCases.Abstractions;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
+using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.UseCases.Implementations;
 using ChatAPI.Persistence.Database;
 using ChatAPI.Persistence.Repositories;
@@ -15,7 +16,7 @@ using Microsoft.OpenApi.Models;
 
 namespace ChatAPI.WebAPI.Extensions
 {
-	public static class ServiceCollectionExtension
+    public static class ServiceCollectionExtension
 	{
 		public static IServiceCollection ConfigureAppSettings(this IServiceCollection services, IConfiguration config)
 			=> services.Configure<AppSettings>(config);
@@ -127,6 +128,8 @@ namespace ChatAPI.WebAPI.Extensions
 				.AddScoped<IFriendshipRepository, FriendshipRepository>()
 				.AddScoped<IUserService, UserService>()
 				.AddScoped<IFriendshipService, FriendshipService>()
-				.AddSignalR().Services;
+				.AddSignalR()
+					.AddMessagePackProtocol()
+				.Services;
 	}
 }

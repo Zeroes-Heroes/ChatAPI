@@ -28,7 +28,7 @@ namespace ChatAPI.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedOn")
                         .HasColumnType("timestamp with time zone");
@@ -42,13 +42,18 @@ namespace ChatAPI.Persistence.Migrations
                     b.Property<int>("TargetUserId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SenderUserId");
 
                     b.HasIndex("TargetUserId");
 
-                    b.ToTable("Friendships");
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Friendships", (string)null);
                 });
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.User", b =>
@@ -123,16 +128,22 @@ namespace ChatAPI.Persistence.Migrations
             modelBuilder.Entity("ChatAPI.Domain.Entities.Friendship", b =>
                 {
                     b.HasOne("ChatAPI.Domain.Entities.User", "Sender")
-                        .WithMany()
+                        .WithMany("SentFriendships")
                         .HasForeignKey("SenderUserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("FK_Friendships_SenderUserId_Users_Id");
 
                     b.HasOne("ChatAPI.Domain.Entities.User", "Target")
-                        .WithMany()
+                        .WithMany("ReceivedFriendships")
                         .HasForeignKey("TargetUserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("FK_Friendships_TargetUserId_Users_Id");
+
+                    b.HasOne("ChatAPI.Domain.Entities.User", null)
+                        .WithMany("Friendships")
+                        .HasForeignKey("UserId");
 
                     b.Navigation("Sender");
 
@@ -165,13 +176,18 @@ namespace ChatAPI.Persistence.Migrations
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.User", b =>
                 {
+                    b.Navigation("Friendships");
+
+                    b.Navigation("ReceivedFriendships");
+
+                    b.Navigation("SentFriendships");
+
                     b.Navigation("UserDevices");
                 });
 
             modelBuilder.Entity("ChatAPI.Domain.Entities.UserDevice", b =>
                 {
-                    b.Navigation("UserLoginCode")
-                        .IsRequired();
+                    b.Navigation("UserLoginCode");
                 });
 #pragma warning restore 612, 618
         }

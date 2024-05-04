@@ -1,5 +1,5 @@
 ﻿using ChatAPI.Application.DTOs.Authorization;
-using ChatAPI.Application.UseCases.Abstractions;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Domain.Entities;
 using ChatAPI.Persistence.Database;
 using Microsoft.EntityFrameworkCore;
@@ -42,8 +42,8 @@ namespace ChatAPI.Persistence.Repositories
 		public Task<bool> DoesUserExist(string phone) =>
 			dbContext.Users.AnyAsync(u => u.Phone == phone);
 
-		public Task<User?> GetUser(string phone) =>
-			dbContext.Users.FirstOrDefaultAsync(u => u.Phone == phone);
+		public Task<User?> GetUserNoTracking(string phone) =>
+			dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Phone == phone);
 
 		/// <summary>
 		/// Gets the user by the given credentials.
@@ -58,5 +58,8 @@ namespace ChatAPI.Persistence.Repositories
 					&& ud.UserLoginCode!.SecretLoginCode == dto.SecretLoginCode)
 				.Select(ud => ud.User)
 				.FirstOrDefaultAsync();
+
+		public Task<User?> GetUserNoTracking(int userId) =>
+			dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
 	}
 }
