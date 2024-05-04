@@ -46,6 +46,7 @@ namespace ChatAPI.WebAPI.Controllers
 		public async Task<ActionResult<UserLoginResponseDTO>> Login([FromBody] UserLoginDTO payload)
 		{
 			Result<UserLoginResponseDTO> result = await userService.Login(payload);
+
 			if (result.IsSuccess)
 				return result.Data;
 

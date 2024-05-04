@@ -40,8 +40,11 @@ namespace ChatAPI.Application.UseCases.Implementations
 
 			UserDevice? userDevice = user.UserDevices.FirstOrDefault(ud => ud.DeviceId == dto.DeviceId);
 
-			if (userDevice is not null && userDevice.IsVerified)
-				return Result<SecretLoginCodeDTO>.Failure("Device is already verified", HttpStatusCode.Forbidden);
+			// Below code is commented because if you delete the app and install it again
+			// and try to login, you will not be able to because the server will return the error.
+
+			//if (userDevice is not null && userDevice.IsVerified)
+			//	return Result<SecretLoginCodeDTO>.Failure("Device is already verified", HttpStatusCode.Forbidden);
 
 			if (userDevice is null)
 			{
