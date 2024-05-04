@@ -11,10 +11,9 @@ builder.Services
 		options.AddPolicy("AllowOrigin", builder =>
 		{
 			builder
-				.WithOrigins("null")
+				.AllowAnyOrigin()
 				.AllowAnyHeader()
-				.AllowAnyMethod()
-				.AllowCredentials(); // Allow credentials if needed
+				.AllowAnyMethod();
 		});
 	})
 	.ConfigureAppSettings(builder.Configuration)
@@ -22,6 +21,7 @@ builder.Services
 	.AddDatabase(builder.Configuration)
 	.AddCaching(builder.Configuration)
 	.AddAuthenticationConfigured(builder.Configuration)
+	.AddAuthorization()
 	.AddServices()
 	.AddEndpointsApiExplorer()
 	.AddControllers();

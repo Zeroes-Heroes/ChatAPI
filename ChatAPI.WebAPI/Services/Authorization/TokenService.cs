@@ -117,7 +117,6 @@ namespace ChatAPI.WebAPI.Services.Authorization
 		private SecurityTokenDescriptor GetTokenDescriptor(int userId, DateTime expiresOn) =>
 			new()
 			{
-				Claims = new Dictionary<string, object>() { { "nameid", userId } },
 				Subject = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())]),
 				Expires = expiresOn,
 				Issuer = appSettings.TokenIssuer,
