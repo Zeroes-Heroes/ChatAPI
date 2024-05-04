@@ -14,7 +14,7 @@ namespace ChatAPI.WebAPI.Controllers
 	[Authorize]
 	public class FriendsController(IFriendshipService friendshipService) : ControllerBase
 	{
-		[HttpPost("add/{targetEmail}")]
+		[HttpPost("add/{targetPhone}")]
 		public async Task<IActionResult> AddFriend([FromRoute] string targetPhone)
 		{
 			Result result = await friendshipService.AddFriend(HttpContext.GetUserId(), targetPhone);
