@@ -24,9 +24,10 @@ namespace ChatAPI.Persistence.Repositories
 		/// <summary>
 		/// Gets the User entity by phone and includes the UserDevices entities of the same user with tracking
 		/// </summary>
-		public Task<User?> GetUserWithUserDevicesIncluded(string phone) =>
+		public Task<User?> GetUser_DevicesAndLoginCodeIncluded(string phone) =>
 			dbContext.Users
 				.Include(u => u.UserDevices)
+				.ThenInclude(u => u.UserLoginCode)
 				.Where(u => u.Phone == phone)
 				.FirstOrDefaultAsync();
 

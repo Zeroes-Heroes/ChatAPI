@@ -27,7 +27,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 		public async Task<Result<SecretLoginCodeDTO>> VerifySmsCode(VerifySmsCodeDTO dto)
 		{
 			// TODO with Twilio: send request to verify phone + code
-			User? user = await userRepo.GetUserWithUserDevicesIncluded(dto.Phone);
+			User? user = await userRepo.GetUser_DevicesAndLoginCodeIncluded(dto.Phone);
 
 			if (user is null)
 				return Result<SecretLoginCodeDTO>.Failure("User with that phone is not found.", HttpStatusCode.NotFound);
@@ -36,7 +36,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			if (dto.SmsVerificationCode != "000000")
 				return Result<SecretLoginCodeDTO>.Failure("Wrong sms verification code.");
 
-			user.UserDevices ??= new List<UserDevice>();
+			user.UserDevices ??= [];
 
 			UserDevice? userDevice = user.UserDevices.FirstOrDefault(ud => ud.DeviceId == dto.DeviceId);
 
@@ -46,16 +46,19 @@ namespace ChatAPI.Application.UseCases.Implementations
 			//if (userDevice is not null && userDevice.IsVerified)
 			//	return Result<SecretLoginCodeDTO>.Failure("Device is already verified", HttpStatusCode.Forbidden);
 
+			Guid secretLoginCode = default;
+
 			if (userDevice is null)
 			{
 				userDevice = new UserDevice(dto.DeviceId);
 				user.UserDevices.Add(userDevice);
+				secretLoginCode = Guid.NewGuid();
+				userDevice.IsVerified = true;
+				userDevice.UserLoginCode = new(user.Id, secretLoginCode);
 			}
+			else
+				secretLoginCode = userDevice.UserLoginCode!.SecretLoginCode;
 
-			Guid secretLoginCode = Guid.NewGuid();
-
-			userDevice.IsVerified = true;
-			userDevice.UserLoginCode = new(user.Id, secretLoginCode);
 			await userRepo.SaveChangesAsync();
 
 			return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));

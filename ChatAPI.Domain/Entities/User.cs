@@ -15,6 +15,6 @@ namespace ChatAPI.Domain.Entities
 		[Required]
 		public DateTime CreatedOn { get; set; } = DateTime.UtcNow;
 
-		public virtual ICollection<UserDevice>? UserDevices { get; set; }
-    };
+		public virtual ICollection<UserDevice> UserDevices { get; set; } = [];
+	};
 }
