@@ -27,7 +27,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 		public async Task<Result<SecretLoginCodeDTO>> VerifySmsCode(VerifySmsCodeDTO dto)
 		{
 			// TODO with Twilio: send request to verify phone + code
-			User? user = await userRepo.GetUser_DevicesAndLoginCodeIncluded(dto.Phone);
+			User? user = await userRepo.GetUserIncludingDevicesAndLoginCode(dto.Phone);
 
 			if (user is null)
 				return Result<SecretLoginCodeDTO>.Failure("User with that phone is not found.", HttpStatusCode.NotFound);

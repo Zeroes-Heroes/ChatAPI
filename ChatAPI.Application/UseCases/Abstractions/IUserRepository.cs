@@ -7,7 +7,7 @@ namespace ChatAPI.Application.UseCases.Abstractions
 	{
 		void AddUserDevice(UserRegisterDTO dto);
 		Task<User?> GetUser(string phone);
-		Task<User?> GetUser_DevicesAndLoginCodeIncluded(string phone);
+		Task<User?> GetUserIncludingDevicesAndLoginCode(string phone);
 		Task<bool> DoesUserExist(string phone);
 		Task<User?> GetUserNoTracking(UserLoginDTO loginCredentials);
 		Task SaveChangesAsync();
