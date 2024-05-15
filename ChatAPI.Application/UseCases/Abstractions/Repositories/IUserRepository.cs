@@ -8,8 +8,8 @@ namespace ChatAPI.Application.UseCases.Abstractions.Repositories
         void AddUserDevice(UserRegisterDTO dto);
         Task<User?> GetUserNoTracking(string phone);
 		Task<User?> GetUserNoTracking(int userId);
-		Task<User?> GetUserWithUserDevicesIncluded(string phone);
-        Task<bool> DoesUserExist(string phone);
+        Task<User?> GetUserIncludingDevicesAndLoginCode(string phone);
+		Task<bool> DoesUserExist(string phone);
         Task<User?> GetUserNoTracking(UserLoginDTO loginCredentials);
     }
 }

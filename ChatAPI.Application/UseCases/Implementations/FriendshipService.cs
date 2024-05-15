@@ -81,6 +81,9 @@ namespace ChatAPI.Application.UseCases.Implementations
 			//	friendship.ModifiedBy == senderUserId)
 			//	return Result.Failure("You cannot change the status.", HttpStatusCode.Forbidden);
 
+			friendship.Status = newStatus;
+			await friendRepo.SaveChangesAsync();
+
 			return Result.Success();
 		}
 	}

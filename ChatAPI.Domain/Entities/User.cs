@@ -14,6 +14,7 @@ namespace ChatAPI.Domain.Entities
 
 		[Required]
 		public DateTime CreatedOn { get; set; } = DateTime.UtcNow;
+		
 		public IEnumerable<Friendship> Friendships
 		{
 			get
@@ -30,8 +31,8 @@ namespace ChatAPI.Domain.Entities
 			}
 		}
 
-		public virtual ICollection<UserDevice>? UserDevices { get; set; }
-		public virtual ICollection<Friendship>? SentFriendships { get; set; }
-		public virtual ICollection<Friendship>? ReceivedFriendships { get; set; }
+		public virtual ICollection<UserDevice>? UserDevices { get; set; } = [];
+		public virtual ICollection<Friendship>? SentFriendships { get; set; } = [];
+		public virtual ICollection<Friendship>? ReceivedFriendships { get; set; } = [];
 	};
 }
