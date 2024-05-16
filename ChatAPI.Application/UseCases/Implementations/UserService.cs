@@ -1,12 +1,13 @@
 ﻿using ChatAPI.Application.DTOs.Authorization;
-using ChatAPI.Application.UseCases.Abstractions;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
+using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.Utilities;
 using ChatAPI.Domain.Entities;
 using System.Net;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-	public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
+    public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
 	{
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{

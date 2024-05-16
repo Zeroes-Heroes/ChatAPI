@@ -1,6 +1,6 @@
+using ChatAPI.Application.Hubs;
 using ChatAPI.Persistence.Database;
 using ChatAPI.WebAPI.Extensions;
-using ChatAPI.WebAPI.Hubs;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -11,9 +11,11 @@ builder.Services
 		options.AddPolicy("AllowOrigin", builder =>
 		{
 			builder
+				//.WithOrigins("*", "null")
 				.AllowAnyOrigin()
 				.AllowAnyHeader()
 				.AllowAnyMethod();
+				//.AllowCredentials();
 		});
 	})
 	.ConfigureAppSettings(builder.Configuration)
@@ -40,7 +42,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapHub<ChatHub>("/chatHub");
+app.MapHub<BaseHub>("/chatHub");
 
 using (IServiceScope scope = app.Services.CreateScope())
 {

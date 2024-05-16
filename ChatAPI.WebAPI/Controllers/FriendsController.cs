@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using ChatAPI.Application.DTOs.Friends;
-using ChatAPI.Application.UseCases.Abstractions;
+using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.Utilities;
 using ChatAPI.Domain.Enums;
 using ChatAPI.WebAPI.Modules;
@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ChatAPI.WebAPI.Controllers
 {
-	[ApiController]
+    [ApiController]
 	[Route("[controller]")]
 	[Authorize]
 	public class FriendsController(IFriendshipService friendshipService) : ControllerBase
@@ -18,11 +18,7 @@ namespace ChatAPI.WebAPI.Controllers
 		public async Task<IActionResult> AddFriend([FromRoute] string targetPhone)
 		{
 			Result result = await friendshipService.AddFriend(HttpContext.GetUserId(), targetPhone);
-
-			if (!result.IsSuccess)
-				return StatusCode(result.StatusCode, result.Error);
-
-			return StatusCode(result.StatusCode);
+			return StatusCode(result.StatusCode, result.Error);
 		}
 
 		[HttpGet]
@@ -30,7 +26,10 @@ namespace ChatAPI.WebAPI.Controllers
 			friendshipService.GetUserFriendships(HttpContext.GetUserId(), status, isInitiator);
 
 		[HttpPost("request/respond")]
-		public Task RespondToFriendRequest([Required] int friendUserId, [Required] FriendshipStatus status) =>
-			friendshipService.RespondToFriendRequest(friendUserId, HttpContext.GetUserId(), status);
+		public async Task<IActionResult> RespondToFriendRequest([Required] int friendUserId, [Required] FriendshipStatus status)
+		{
+			Result result = await friendshipService.RespondToFriendRequest(friendUserId, HttpContext.GetUserId(), status);
+			return StatusCode(result.StatusCode, result.Error);
+		}
 	}
 }
