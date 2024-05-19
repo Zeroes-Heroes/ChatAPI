@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using ChatAPI.Application.DTOs.Friends;
+using ChatAPI.Application.DTOs.Friends.LiveEvents;
 using ChatAPI.Application.Hubs;
 using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Application.UseCases.Abstractions.Services;
@@ -43,9 +44,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 				.User(targetUser.Id.ToString())
 				.SendAsync(
 					LiveEvents.NewFriendRequest,
-					senderUserId,
-					senderUser.Phone,
-					senderUser.Name);
+					new FriendRequestModel(senderUserId, senderUser.Phone, senderUser.Name));
 
 			return Result.Success();
 		}

@@ -25,10 +25,15 @@ namespace ChatAPI.WebAPI.Controllers
 		public Task<IEnumerable<FriendDTO>> GetUserFriendships(FriendshipStatus? status, bool? isInitiator) =>
 			friendshipService.GetUserFriendships(HttpContext.GetUserId(), status, isInitiator);
 
+		/// <summary>
+		/// Acknowledges a friend request and updates the status of the friendship based on the parameters.
+		/// </summary>
+		/// <param name="userId">Id of the user who sent the friend request.</param>
+		/// <param name="status">The new status to update with.</param>
 		[HttpPost("request-respond")]
-		public async Task<IActionResult> RespondToFriendRequest([Required] int friendUserId, [Required] FriendshipStatus status)
+		public async Task<IActionResult> RespondToFriendRequest([Required] int userId, [Required] FriendshipStatus status)
 		{
-			Result result = await friendshipService.RespondToFriendRequest(friendUserId, HttpContext.GetUserId(), status);
+			Result result = await friendshipService.RespondToFriendRequest(userId, HttpContext.GetUserId(), status);
 			return StatusCode(result.StatusCode, result.Error);
 		}
 	}
