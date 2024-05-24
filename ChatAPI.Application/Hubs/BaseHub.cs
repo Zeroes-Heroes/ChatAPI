@@ -1,6 +1,7 @@
 ﻿using ChatAPI.Domain.LiveConnections;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
 
 namespace ChatAPI.Application.Hubs
 {
@@ -36,9 +37,12 @@ namespace ChatAPI.Application.Hubs
 	[Authorize]
 	public class BaseHub : Hub
 	{
-		public Task SendMessage(int fromUserId, int toUserId, string message) =>
-			Clients
+		public Task SendMessage(int toUserId, string message)
+		{
+			string? fromUserId = Context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+			return Clients
 				.User(toUserId.ToString())
 				.SendAsync(LiveEvents.NewMessage, fromUserId, message);
+		}
 	}
 }
