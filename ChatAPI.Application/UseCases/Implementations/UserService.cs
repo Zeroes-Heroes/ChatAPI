@@ -7,7 +7,7 @@ using System.Net;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-    public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
+	public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
 	{
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{
@@ -53,15 +53,31 @@ namespace ChatAPI.Application.UseCases.Implementations
 			{
 				userDevice = new UserDevice(dto.DeviceId);
 				user.UserDevices.Add(userDevice);
-				secretLoginCode = Guid.NewGuid();
-				userDevice.IsVerified = true;
+				UserDevice? previousDevice = user.UserDevices.FirstOrDefault(ud => ud.IsVerified);
+
+				if (previousDevice == null)
+					secretLoginCode = Guid.NewGuid();
+				else
+					secretLoginCode = previousDevice.UserLoginCode!.SecretLoginCode;
+
 				userDevice.UserLoginCode = new(user.Id, secretLoginCode);
+				userDevice.IsVerified = true;
+
+				await userRepo.SaveChangesAsync();
+				return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));
 			}
-			else
+
+			if (userDevice.IsVerified)
 				secretLoginCode = userDevice.UserLoginCode!.SecretLoginCode;
 
-			await userRepo.SaveChangesAsync();
+			if (!userDevice.IsVerified)
+			{
+				secretLoginCode = Guid.NewGuid();
+				userDevice.UserLoginCode = new(user.Id, secretLoginCode);
+				userDevice.IsVerified = true;
+			}
 
+			await userRepo.SaveChangesAsync();
 			return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));
 		}
 

@@ -1,6 +1,4 @@
-﻿using System.Security.Claims;
-using System.Text;
-using ChatAPI.Application.UseCases.Abstractions.Repositories;
+﻿using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.UseCases.Implementations;
 using ChatAPI.Persistence.Database;
@@ -13,10 +11,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
+using System.Text;
 
 namespace ChatAPI.WebAPI.Extensions
 {
-    public static class ServiceCollectionExtension
+	public static class ServiceCollectionExtension
 	{
 		public static IServiceCollection ConfigureAppSettings(this IServiceCollection services, IConfiguration config)
 			=> services.Configure<AppSettings>(config);
@@ -65,8 +65,9 @@ namespace ChatAPI.WebAPI.Extensions
 		public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration) =>
 			services.AddDbContextPool<AppDbContext>(options =>
 			{
-				options.UseNpgsql(configuration["DefaultConnection"]);
-				options.ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning));
+				options
+				.UseNpgsql(configuration["DefaultConnection"])
+				.ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning));
 			});
 
 		public static IServiceCollection AddCaching(this IServiceCollection services, IConfiguration configuration)
