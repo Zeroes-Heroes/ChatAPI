@@ -1,5 +1,4 @@
-﻿using System.Net;
-using ChatAPI.Application.DTOs.Friends;
+﻿using ChatAPI.Application.DTOs.Friends;
 using ChatAPI.Application.DTOs.Friends.LiveEvents;
 using ChatAPI.Application.Hubs;
 using ChatAPI.Application.UseCases.Abstractions.Repositories;
@@ -7,13 +6,16 @@ using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.Utilities;
 using ChatAPI.Domain.Entities;
 using ChatAPI.Domain.Enums;
-using ChatAPI.Domain.LiveConnections;
 using Microsoft.AspNetCore.SignalR;
+using System.Net;
+using static ChatAPI.Domain.LiveConnections.LiveEvents;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
 	public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext) : IFriendshipService
 	{
+		private readonly IHubContext<BaseHub> hubContext = hubContext;
+
 		/// <summary>
 		/// Creates a friendship between two parties with status 'pending'.
 		/// </summary>
@@ -43,7 +45,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			await hubContext.Clients
 				.User(targetUser.Id.ToString())
 				.SendAsync(
-					LiveEvents.NewFriendRequest,
+					NewFriendRequest,
 					new FriendRequestModel(senderUserId, senderUser.Phone, senderUser.Name));
 
 			return Result.Success();
@@ -82,6 +84,8 @@ namespace ChatAPI.Application.UseCases.Implementations
 
 			friendship.Status = newStatus;
 			await friendRepo.SaveChangesAsync();
+
+			await hubContext.Clients.User(targetUserId.ToString()).SendAsync(FriendRequestAnswer, senderUserId, newStatus); ;
 
 			return Result.Success();
 		}
