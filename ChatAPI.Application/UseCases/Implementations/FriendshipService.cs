@@ -43,7 +43,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 
 			// Send a notification (event) to the targeted user (receiver of the friend request).
 			await hubContext.Clients
-				.User(targetUser.Id.ToString())
+				.GetUserById(targetUser.Id)
 				.SendAsync(
 					NewFriendRequest,
 					new FriendRequestModel(senderUserId, senderUser.Phone, senderUser.Name));
@@ -85,7 +85,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			friendship.Status = newStatus;
 			await friendRepo.SaveChangesAsync();
 
-			await hubContext.Clients.User(targetUserId.ToString()).SendAsync(FriendRequestAnswer, senderUserId, newStatus); ;
+			await hubContext.Clients.GetUserById(targetUserId).SendAsync(FriendRequestAnswer, new FriendRequestModelAnswerModel(senderUserId, newStatus));
 
 			return Result.Success();
 		}

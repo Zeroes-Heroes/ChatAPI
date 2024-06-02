@@ -41,7 +41,7 @@ namespace ChatAPI.Application.Hubs
 		{
 			string? fromUserId = Context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
 			return Clients
-				.User(toUserId.ToString())
+				.GetUserById(toUserId)
 				.SendAsync(LiveEvents.NewMessage, fromUserId, message);
 		}
 	}
