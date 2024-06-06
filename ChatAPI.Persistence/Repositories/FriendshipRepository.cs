@@ -1,13 +1,13 @@
 ﻿using ChatAPI.Application.DTOs.Friends;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Domain.Entities;
 using ChatAPI.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
 using ChatAPI.Persistence.Database;
-using ChatAPI.Application.UseCases.Abstractions.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace ChatAPI.Persistence.Repositories
 {
-    public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepository
+	public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepository
 	{
 		public void AddFriendship(int senderUserId, int targetUserId)
 		{
@@ -32,20 +32,20 @@ namespace ChatAPI.Persistence.Repositories
 						 && userIds.Contains(f.TargetUserId))
 				.FirstOrDefaultAsync();
 
-		public async Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null)
+		public async Task<IEnumerable<FriendshipDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null)
 		{
 			IQueryable<Friendship> query = dbContext.Friendships
 				.Where(f => f.SenderUserId == userId || f.TargetUserId == userId);
 
 			if (status.HasValue)
-				query = query.Where(f => f.Status == status);	
+				query = query.Where(f => f.Status == status);
 
 			if (isInitiator.HasValue)
 				query = query.Where(f => isInitiator.Value
 								? f.SenderUserId == userId
 								: f.TargetUserId == userId);
 
-			return await query.Select(friendship => new FriendDTO(
+			return await query.Select(friendship => new FriendshipDTO(
 
 					friendship.SenderUserId == userId
 						? friendship.TargetUserId

@@ -9,6 +9,6 @@ namespace ChatAPI.Application.UseCases.Abstractions.Repositories
         void AddFriendship(int senderUserId, int targetUserId);
         Task<Friendship?> GetSpecificFriendshipByUserIds(int senderUserId, int targetUserId);
 		Task<Friendship?> GetAnyFriendshipByUserIds(params int[] userIds);
-        Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null);
+        Task<IEnumerable<FriendshipDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null);
     }
 }
