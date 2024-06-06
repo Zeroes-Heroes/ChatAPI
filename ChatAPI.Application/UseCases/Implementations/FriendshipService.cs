@@ -1,4 +1,5 @@
 ﻿using ChatAPI.Application.DTOs.Friends;
+using ChatAPI.Application.DTOs.Friends.LiveEvents;
 using ChatAPI.Application.Hubs;
 using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Application.UseCases.Abstractions.Services;
@@ -20,20 +21,20 @@ namespace ChatAPI.Application.UseCases.Implementations
 		/// </summary>
 		/// <param name="senderUserId">The user id which sends the friend request.</param>
 		/// <param name="phone">The receiver's phone number. </param>
-		public async Task<Result> AddFriend(int senderUserId, string phone)
+		public async Task<Result<FriendshipDTO>> AddFriend(int senderUserId, string phone)
 		{
 			User? targetUser = await userRepo.GetUserNoTracking(phone);
 
 			if (targetUser is null)
-				return Result.Failure("User with that phone is not found.", HttpStatusCode.NotFound);
+				return Result<FriendshipDTO>.Failure("User with that phone is not found.", HttpStatusCode.NotFound);
 
 			if (senderUserId == targetUser.Id)
-				return Result.Failure("You cannot add yourself as a friend.");
+				return Result<FriendshipDTO>.Failure("You cannot add yourself as a friend.");
 
 			Friendship? friendship = await friendRepo.GetAnyFriendshipByUserIds([senderUserId, targetUser.Id]);
 
 			if (friendship is not null)
-				return Result.Failure("You already have relations with this user.", HttpStatusCode.Conflict);
+				return Result<FriendshipDTO>.Failure("You already have relations with this user.", HttpStatusCode.Conflict);
 
 			friendRepo.AddFriendship(senderUserId, targetUser.Id);
 			await friendRepo.SaveChangesAsync();
@@ -47,7 +48,8 @@ namespace ChatAPI.Application.UseCases.Implementations
 					NewFriendRequest,
 					new FriendshipDTO(senderUserId, senderUser.Name, senderUser.Phone, FriendshipStatus.Pending, IsInitiator: false));
 
-			return Result.Success();
+			return Result<FriendshipDTO>.Success(
+				new FriendshipDTO(targetUser.Id, targetUser.Name, targetUser.Phone, FriendshipStatus.Pending, IsInitiator: true));
 		}
 
 		/// <summary>
