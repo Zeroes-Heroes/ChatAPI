@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ChatAPI.WebAPI.Controllers
 {
-    [ApiController]
+	[ApiController]
 	[Route("[controller]")]
 	[Authorize]
 	public class FriendsController(IFriendshipService friendshipService) : ControllerBase
@@ -22,7 +22,7 @@ namespace ChatAPI.WebAPI.Controllers
 		}
 
 		[HttpGet]
-		public Task<IEnumerable<FriendDTO>> GetUserFriendships(FriendshipStatus? status, bool? isInitiator) =>
+		public Task<IEnumerable<FriendshipDTO>> GetUserFriendships(FriendshipStatus? status, bool? isInitiator) =>
 			friendshipService.GetUserFriendships(HttpContext.GetUserId(), status, isInitiator);
 
 		/// <summary>

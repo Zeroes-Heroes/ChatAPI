@@ -1,5 +1,4 @@
 ﻿using ChatAPI.Application.DTOs.Friends;
-using ChatAPI.Application.DTOs.Friends.LiveEvents;
 using ChatAPI.Application.Hubs;
 using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Application.UseCases.Abstractions.Services;
@@ -46,7 +45,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 				.GetUserById(targetUser.Id)
 				.SendAsync(
 					NewFriendRequest,
-					new FriendRequestModel(senderUserId, senderUser.Phone, senderUser.Name));
+					new FriendshipDTO(senderUserId, senderUser.Name, senderUser.Phone, FriendshipStatus.Pending, IsInitiator: false));
 
 			return Result.Success();
 		}
@@ -57,7 +56,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 		/// <param name="userId">The user who's friendships we want to return.</param>
 		/// <param name="status">Filter by friendship status.</param>
 		/// <param name="isInitiator">Whether or not to filter only these friendships, where the given user id is the sender of the friend request.</param>
-		public Task<IEnumerable<FriendDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null) =>
+		public Task<IEnumerable<FriendshipDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null) =>
 			friendRepo.GetUserFriendships(userId, status, isInitiator);
 
 		/// <summary>
