@@ -23,6 +23,10 @@ namespace ChatAPI.Application.UseCases.Implementations
 			userRepo.AddUserDevice(dto);
 			await userRepo.SaveChangesAsync();
 
+			RequestSmsCodeDTO smsCodeDTO = new(dto.Phone, dto.DeviceId);
+
+			await RequestSmsCode(smsCodeDTO);
+
 			return Result.Success(HttpStatusCode.Created);
 		}
 
