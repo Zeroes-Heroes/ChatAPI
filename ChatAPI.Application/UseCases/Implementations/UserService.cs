@@ -60,10 +60,11 @@ namespace ChatAPI.Application.UseCases.Implementations
 				else
 					secretLoginCode = previousDevice.UserLoginCode!.SecretLoginCode;
 
-				userDevice.UserLoginCode = new(user.Id, secretLoginCode);
-				userDevice.IsVerified = true;
-
 				await userRepo.SaveChangesAsync();
+				userDevice.UserLoginCode = new(userDevice.Id, secretLoginCode);
+				userDevice.IsVerified = true;
+				await userRepo.SaveChangesAsync();
+
 				return Result<SecretLoginCodeDTO>.Success(new(secretLoginCode));
 			}
 
@@ -73,7 +74,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			if (!userDevice.IsVerified)
 			{
 				secretLoginCode = Guid.NewGuid();
-				userDevice.UserLoginCode = new(user.Id, secretLoginCode);
+				userDevice.UserLoginCode = new(userDevice.Id, secretLoginCode);
 				userDevice.IsVerified = true;
 			}
 
