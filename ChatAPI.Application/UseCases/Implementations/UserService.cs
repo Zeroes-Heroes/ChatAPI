@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using System.Net;
 using Twilio.Exceptions;
 using Twilio.Rest.Verify.V2.Service;
+using static ChatAPI.Domain.Common.Constants;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
@@ -33,7 +34,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 		public async Task<Result> RequestSmsCode(RequestSmsCodeDTO dto)
 		{
 			if (EnvironmentHelper.IsDevelopment())
-				return Result.Success(HttpStatusCode.OK);
+				return Result.Success();
 
 			try
 			{
@@ -41,16 +42,16 @@ namespace ChatAPI.Application.UseCases.Implementations
 			}
 			catch (ApiException ex)
 			{
-				if (ex.Code == 60203)
+				if (ex.Code == ErrorCodeTwillioLimitReached)
 					return Result.Failure("You can not send more codes at the moment. Please try again later.");
 
-				if (ex.Code == 60200)
+				if (ex.Code == ErrorCodeTwillioWrongNumber)
 					return Result.Failure("Wrong phone number.");
 
 				return Result.Failure("Failed to send sms code.");
 			}
 
-			return Result.Success(HttpStatusCode.OK);
+			return Result.Success();
 		}
 
 		/// <summary>
