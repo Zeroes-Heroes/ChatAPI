@@ -1,14 +1,21 @@
-﻿using ChatAPI.Application.DTOs.Authorization;
+﻿using ChatAPI.Application.Common;
+using ChatAPI.Application.DTOs.Authorization;
 using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.Utilities;
 using ChatAPI.Domain.Entities;
+using Microsoft.Extensions.Options;
 using System.Net;
+using Twilio.Exceptions;
+using Twilio.Rest.Verify.V2.Service;
+using static ChatAPI.Domain.Common.Constants;
 
 namespace ChatAPI.Application.UseCases.Implementations
 {
-	public class UserService(IUserRepository userRepo, ITokenService tokenService) : IUserService
+	public class UserService(IUserRepository userRepo, ITokenService tokenService, IOptions<AppSettings> options) : IUserService
 	{
+		private readonly AppSettings appSettings = options.Value;
+
 		public async Task<Result> Register(UserRegisterDTO dto)
 		{
 			if (await userRepo.DoesUserExist(dto.Phone))
@@ -16,10 +23,36 @@ namespace ChatAPI.Application.UseCases.Implementations
 
 			userRepo.AddUserDevice(dto);
 			await userRepo.SaveChangesAsync();
+
+			RequestSmsCodeDTO smsCodeDTO = new(dto.Phone, dto.DeviceId);
+
+			await RequestSmsCode(smsCodeDTO);
+
 			return Result.Success(HttpStatusCode.Created);
 		}
 
-		// TODO with Twilio: send sms code to phone number
+		public async Task<Result> RequestSmsCode(RequestSmsCodeDTO dto)
+		{
+			if (EnvironmentHelper.IsDevelopment())
+				return Result.Success();
+
+			try
+			{
+				await VerificationResource.CreateAsync(appSettings.TwillioVerificationSid, dto.Phone, "sms");
+			}
+			catch (ApiException ex)
+			{
+				if (ex.Code == ErrorCodeTwillioLimitReached)
+					return Result.Failure("You can not send more codes at the moment. Please try again later.");
+
+				if (ex.Code == ErrorCodeTwillioWrongNumber)
+					return Result.Failure("Wrong phone number.");
+
+				return Result.Failure("Failed to send sms code.");
+			}
+
+			return Result.Success();
+		}
 
 		/// <summary>
 		/// Verifies the sms code of the user, generates a secret login code and returns it.
@@ -27,15 +60,22 @@ namespace ChatAPI.Application.UseCases.Implementations
 		/// <returns>A secret login code</returns>
 		public async Task<Result<SecretLoginCodeDTO>> VerifySmsCode(VerifySmsCodeDTO dto)
 		{
-			// TODO with Twilio: send request to verify phone + code
 			User? user = await userRepo.GetUserIncludingDevicesAndLoginCode(dto.Phone);
 
 			if (user is null)
 				return Result<SecretLoginCodeDTO>.Failure("User with that phone is not found.", HttpStatusCode.NotFound);
 
-			// The following is a custom implementation until we actually have Twilio
-			if (dto.SmsVerificationCode != "000000")
-				return Result<SecretLoginCodeDTO>.Failure("Wrong sms verification code.");
+			if (!EnvironmentHelper.IsDevelopment())
+			{
+				VerificationCheckResource verification =
+					await VerificationCheckResource.CreateAsync(appSettings.TwillioVerificationSid, dto.SmsVerificationCode, dto.Phone);
+
+				if (verification.Status == "canceled")
+					return Result<SecretLoginCodeDTO>.Failure("Wrong sms verification code.");
+
+				if (verification.Status == "pending")
+					return Result<SecretLoginCodeDTO>.Failure("Sms code not verified. Try again.");
+			}
 
 			user.UserDevices ??= [];
 

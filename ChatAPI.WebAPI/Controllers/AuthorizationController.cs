@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ChatAPI.WebAPI.Controllers
 {
-    [ApiController]
+	[ApiController]
 	[Route("[controller]")]
 	[Authorize]
 	public class AuthorizationController(IUserService userService) : ControllerBase
@@ -16,6 +16,15 @@ namespace ChatAPI.WebAPI.Controllers
 		public async Task<ActionResult> Register([FromBody] UserRegisterDTO payload)
 		{
 			Result result = await userService.Register(payload);
+			return StatusCode(result.StatusCode, result.Error);
+		}
+
+		[AllowAnonymous]
+		[HttpPost("request-sms-code")]
+		public async Task<ActionResult> RequestSmsCode([FromBody] RequestSmsCodeDTO code)
+		{
+			Result result = await userService.RequestSmsCode(code);
+
 			return StatusCode(result.StatusCode, result.Error);
 		}
 

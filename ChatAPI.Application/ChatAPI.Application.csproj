@@ -8,6 +8,7 @@
 
   <ItemGroup>
 	<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	<PackageReference Include="Twilio" Version="7.1.1" />
     <ProjectReference Include="..\ChatAPI.Domain\ChatAPI.Domain.csproj" />
   </ItemGroup>
 
