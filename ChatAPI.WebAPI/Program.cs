@@ -1,4 +1,5 @@
 using ChatAPI.Application.Hubs;
+using ChatAPI.Application.Utilities;
 using ChatAPI.Persistence.Database;
 using ChatAPI.WebAPI.Extensions;
 
@@ -15,7 +16,7 @@ builder.Services
 				.AllowAnyOrigin()
 				.AllowAnyHeader()
 				.AllowAnyMethod();
-				//.AllowCredentials();
+			//.AllowCredentials();
 		});
 	})
 	.ConfigureAppSettings(builder.Configuration)
@@ -24,6 +25,7 @@ builder.Services
 	.AddCaching(builder.Configuration)
 	.AddAuthenticationConfigured(builder.Configuration)
 	.AddAuthorization()
+	.InitializeTwilio(builder.Configuration)
 	.AddServices()
 	.AddEndpointsApiExplorer()
 	.AddControllers();
@@ -35,6 +37,8 @@ if (app.Environment.IsDevelopment())
 	app.UseSwaggerUI();
 else
 	app.UseExceptionHandler("/error");
+
+ServiceLocator.Configure(app.Services);
 
 app.UseCors("AllowOrigin");
 

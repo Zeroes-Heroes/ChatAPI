@@ -1,9 +1,9 @@
-﻿using ChatAPI.Application.UseCases.Abstractions.Repositories;
+﻿using ChatAPI.Application.Common;
+using ChatAPI.Application.UseCases.Abstractions.Repositories;
 using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.UseCases.Implementations;
 using ChatAPI.Persistence.Database;
 using ChatAPI.Persistence.Repositories;
-using ChatAPI.WebAPI.Common;
 using ChatAPI.WebAPI.Modules.MessagePackProtocol;
 using ChatAPI.WebAPI.Services.Authorization;
 using MessagePack;
@@ -16,6 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Security.Claims;
 using System.Text;
+using Twilio;
 
 namespace ChatAPI.WebAPI.Extensions
 {
@@ -153,5 +154,11 @@ namespace ChatAPI.WebAPI.Extensions
 							.WithSecurity(MessagePackSecurity.UntrustedData);
 					})
 				.Services;
+
+		public static IServiceCollection InitializeTwilio(this IServiceCollection service, IConfiguration configuration)
+		{
+			TwilioClient.Init(configuration["TwillioAccountSid"], configuration["TwillioAuthToken"]);
+			return service;
+		}
 	}
 }
