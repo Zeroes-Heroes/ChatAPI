@@ -95,7 +95,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			if (user is null)
 				return Result<UserLoginResponseDTO>.Failure("The login credentials are invalid.", HttpStatusCode.Unauthorized);
 
-			return Result<UserLoginResponseDTO>.Success(new(user.Name, await tokenService.GenerateTokens(user!.Id)));
+			return Result<UserLoginResponseDTO>.Success(new(user.Name, await tokenService.GenerateTokens(user!.Id), user.Id));
 		}
 	}
 }
