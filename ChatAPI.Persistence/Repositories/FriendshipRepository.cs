@@ -59,7 +59,7 @@ namespace ChatAPI.Persistence.Repositories
 						? friendship.Target!.Phone
 						: friendship.Sender!.Phone,
 
-					friendship.Status,
+					(int)friendship.Status,
 
 					friendship.SenderUserId == userId))
 				.ToArrayAsync();

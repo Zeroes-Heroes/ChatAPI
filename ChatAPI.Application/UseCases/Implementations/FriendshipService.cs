@@ -46,10 +46,10 @@ namespace ChatAPI.Application.UseCases.Implementations
 				.GetUserById(targetUser.Id)
 				.SendAsync(
 					NewFriendRequest,
-					new FriendshipDTO(senderUserId, senderUser.Name, senderUser.Phone, FriendshipStatus.Pending, IsInitiator: false));
+					new FriendshipDTO(senderUserId, senderUser.Name, senderUser.Phone, (int)FriendshipStatus.Pending, IsInitiator: false));
 
 			return Result<FriendshipDTO>.Success(
-				new FriendshipDTO(targetUser.Id, targetUser.Name, targetUser.Phone, FriendshipStatus.Pending, IsInitiator: true));
+				new FriendshipDTO(targetUser.Id, targetUser.Name, targetUser.Phone, (int)FriendshipStatus.Pending, IsInitiator: true));
 		}
 
 		/// <summary>

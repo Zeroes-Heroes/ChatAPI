@@ -4,10 +4,7 @@ using ChatAPI.Application.UseCases.Abstractions.Services;
 using ChatAPI.Application.UseCases.Implementations;
 using ChatAPI.Persistence.Database;
 using ChatAPI.Persistence.Repositories;
-using ChatAPI.WebAPI.Modules.MessagePackProtocol;
 using ChatAPI.WebAPI.Services.Authorization;
-using MessagePack;
-using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -141,18 +138,7 @@ namespace ChatAPI.WebAPI.Extensions
 				.AddScoped<IUserService, UserService>()
 				.AddScoped<IFriendshipService, FriendshipService>()
 				.AddSignalR()
-					.AddMessagePackProtocol(options =>
-					{
-						IFormatterResolver resolver = CompositeResolver.Create(
-							EnumAsIntegerResolver.Instance,
-							StandardResolver.Instance
-						);
-
-						options.SerializerOptions = MessagePackSerializerOptions.Standard
-							.WithResolver(resolver)
-							.WithCompression(MessagePackCompression.Lz4Block)
-							.WithSecurity(MessagePackSecurity.UntrustedData);
-					})
+					.AddMessagePackProtocol()
 				.Services;
 
 		public static IServiceCollection InitializeTwilio(this IServiceCollection service, IConfiguration configuration)
