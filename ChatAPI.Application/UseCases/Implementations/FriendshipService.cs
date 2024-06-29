@@ -86,7 +86,7 @@ namespace ChatAPI.Application.UseCases.Implementations
 			friendship.Status = newStatus;
 			await friendRepo.SaveChangesAsync();
 
-			await hubContext.Clients.GetUserById(senderUserId).SendAsync(FriendRequestAnswer, new FriendRequestModelAnswerModel(targetUserId, newStatus));
+			await hubContext.Clients.GetUserById(senderUserId).SendAsync(FriendRequestAnswer, new FriendRequestModelAnswerModel(targetUserId, (int)newStatus));
 
 			return Result.Success();
 		}

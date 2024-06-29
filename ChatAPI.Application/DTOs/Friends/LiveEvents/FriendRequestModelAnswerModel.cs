@@ -2,5 +2,5 @@
 
 namespace ChatAPI.Application.DTOs.Friends.LiveEvents
 {
-	public record FriendRequestModelAnswerModel(int UserId, FriendshipStatus FriendshipStatus);
+	public record FriendRequestModelAnswerModel(int UserId, int FriendshipStatus);
 }
