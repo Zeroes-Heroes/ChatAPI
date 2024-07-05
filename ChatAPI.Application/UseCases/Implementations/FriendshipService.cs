@@ -33,10 +33,13 @@ namespace ChatAPI.Application.UseCases.Implementations
 
 			Friendship? friendship = await friendRepo.GetAnyFriendshipByUserIds([senderUserId, targetUser.Id]);
 
-			if (friendship is not null)
+			if (friendship is null)
+				friendRepo.AddFriendship(senderUserId, targetUser.Id);
+			else if (friendship.Status == FriendshipStatus.Rejected)
+				friendship.Status = FriendshipStatus.Pending;
+			else
 				return Result<FriendshipDTO>.Failure("You already have relations with this user.", HttpStatusCode.Conflict);
 
-			friendRepo.AddFriendship(senderUserId, targetUser.Id);
 			await friendRepo.SaveChangesAsync();
 
 			User senderUser = (await userRepo.GetUserNoTracking(senderUserId))!;
