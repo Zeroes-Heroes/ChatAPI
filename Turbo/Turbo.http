@@ -1,0 +1,6 @@
+@Turbo_HostAddress = http://localhost:5094
+
+GET {{Turbo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

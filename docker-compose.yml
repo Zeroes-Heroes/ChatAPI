@@ -2,7 +2,7 @@ version: '3.4'
 
 services:
   chatserver.api:
-    container_name: chatapi
+    container_name: Turbo
     env_file: .env
     restart: unless-stopped
     ports:
@@ -10,7 +10,7 @@ services:
     image: ${DOCKER_REGISTRY-}chatserverapi
     build:
       context: .
-      dockerfile: ./ChatAPI.WebAPI/Dockerfile
+      dockerfile: ./Turbo/Dockerfile
     deploy:
       resources:
         limits:
@@ -21,7 +21,7 @@ services:
           memory: 512M
   
   redis:
-    container_name: redis
+    container_name: TurboRedis
     image: redis
     restart: unless-stopped
     ports:
