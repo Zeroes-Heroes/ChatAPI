@@ -11,8 +11,12 @@ using Services.Friendship.Interface;
 using Services.Friendship.Service;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.Friendship.Repository;
+using Services.Repositories.Resources.Interface;
+using Services.Repositories.Resources.Repository;
 using Services.Repositories.User.Interface;
 using Services.Repositories.User.Repository;
+using Services.Resources.Interfaces;
+using Services.Resources.Service;
 using Services.Token.Interface;
 using Services.Token.Service;
 using Services.User.Interface;
@@ -144,6 +148,8 @@ public static class ServiceCollectionExtension
 			.AddScoped<IFriendshipRepository, FriendshipRepository>()
 			.AddScoped<IUserService, UserService>()
 			.AddScoped<IFriendshipService, FriendshipService>()
+			.AddScoped<IResourceService, ResourcesService>()
+			.AddScoped<IResourceRepository, ResourceRepository>()
 			.AddSignalR()
 				.AddMessagePackProtocol()
 			.Services;
