@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<UserDeviceEntity> UserDevices { get; set; }
 	public DbSet<FriendshipEntity> Friendships { get; set; }
 	public DbSet<UserLoginCodeEntity> UserLoginCodes { get; set; }
+	public DbSet<CountryCodesEntity> CountryCodes { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -19,5 +20,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new UserDeviceConfiguration());
 		modelBuilder.ApplyConfiguration(new UserLoginCodeConfiguration());
 		modelBuilder.ApplyConfiguration(new FriendshipConfiguration());
+		modelBuilder.ApplyConfiguration(new CountryCodesConfiguration());
 	}
 }
