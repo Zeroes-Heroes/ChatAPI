@@ -7,8 +7,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Services.Chat.Interface;
+using Services.Chat.Service;
 using Services.Friendship.Interface;
 using Services.Friendship.Service;
+using Services.Repositories.Chat.Interface;
+using Services.Repositories.Chat.Repository;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.Friendship.Repository;
 using Services.Repositories.Resources.Interface;
@@ -150,6 +154,8 @@ public static class ServiceCollectionExtension
 			.AddScoped<IFriendshipService, FriendshipService>()
 			.AddScoped<IResourceService, ResourcesService>()
 			.AddScoped<IResourceRepository, ResourceRepository>()
+			.AddScoped<IChatService, ChatService>()
+			.AddScoped<IChatRepository, ChatRepository>()
 			.AddSignalR()
 				.AddMessagePackProtocol()
 			.Services;

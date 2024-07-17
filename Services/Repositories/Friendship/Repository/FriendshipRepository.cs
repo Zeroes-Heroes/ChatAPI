@@ -67,4 +67,10 @@ public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepositor
 
 	public Task SaveChangesAsync() =>
 		dbContext.SaveChangesAsync();
+
+	public async Task<bool> AreUsersFriends(int[] userIds) =>
+	(await dbContext.Friendships
+			.Where(f => userIds.Contains(f.SenderUserId)
+					 && userIds.Contains(f.TargetUserId))
+			.FirstOrDefaultAsync())?.Status == FriendshipStatus.Accepted;
 }
