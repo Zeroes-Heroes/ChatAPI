@@ -1,7 +1,11 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Database.Context;
+using Database.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Services.Extensions;
+using Services.Hubs.Models;
 using Services.Utilities.Statics;
-using System.Security.Claims;
 
 namespace Services.Hubs;
 
@@ -35,13 +39,26 @@ Other things to note:
 */
 
 [Authorize]
-public class BaseHub : Hub
+public class BaseHub(AppDbContext dbContext) : Hub
 {
-	public Task SendMessage(int toUserId, string message)
+	public async void SendMessage(SendMessageEvent sendMessageEvent)
 	{
-		string? fromUserId = Context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-		return Clients
-			.GetUserById(toUserId)
-			.SendAsync(LiveEvents.NewMessage, fromUserId, message);
+		int userId = Context.User.Id();
+		MessageEntity messageEntity = new(sendMessageEvent.Message, userId, sendMessageEvent.ChatId, DateTime.UtcNow);
+		messageEntity = dbContext.Messages.Add(messageEntity).Entity;
+		await dbContext.SaveChangesAsync();
+
+		int[] userIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync()).ToArray();
+
+		NewMessageCreatedEvent newMessageCreatedEvent = new(messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt);
+		NewMessageEvent newMessageEvent = new(messageEntity.Id, userId, messageEntity.Id, sendMessageEvent.Message, messageEntity.CreatedAt);
+
+		await Clients
+			.GetUserById(userId)
+			.SendAsync(LiveEvents.NewMessageCreated, newMessageCreatedEvent);
+
+		await Clients
+			.GetUsersByIds(userIds)
+			.SendAsync(LiveEvents.NewMessage, newMessageEvent);
 	}
 }

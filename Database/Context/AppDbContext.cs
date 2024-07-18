@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<UserLoginCodeEntity> UserLoginCodes { get; set; }
 	public DbSet<CountryCodesEntity> CountryCodes { get; set; }
 	public DbSet<ChatEntity> Chats { get; set; }
+	public DbSet<MessageEntity> Messages { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
