@@ -11,5 +11,7 @@ public interface IUserRepository : IBaseRepository
 	Task<UserEntity?> GetUserNoTracking(int userId);
 	Task<UserEntity?> GetUserIncludingDevicesAndLoginCode(string phone);
 	Task<bool> DoesUserExist(string phone);
+	Task<bool> DoesUserExist(int id);
 	Task<UserEntity?> GetUserNoTracking(UserLoginDTO loginCredentials);
+	Task<UserEntity[]> GetUsers(int[] userIds);
 }

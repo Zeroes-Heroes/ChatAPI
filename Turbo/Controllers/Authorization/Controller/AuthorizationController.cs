@@ -16,9 +16,7 @@ public class AuthorizationController(IUserService userService) : ControllerBase
     public async Task<ActionResult> Register([FromBody] UserRegisterDTO payload)
     {
         Result result = await userService.Register(payload);
-        var test = EnvironmentHelper.IsProduction();
-        var test2 = EnvironmentHelper.IsStaging();
-        var test3 = EnvironmentHelper.IsDevelopment();
+       
 		return StatusCode(result.StatusCode, result.Error);
     }
 

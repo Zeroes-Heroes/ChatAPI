@@ -43,6 +43,13 @@ public class UserRepository(AppDbContext dbContext) : IUserRepository
 	public Task<bool> DoesUserExist(string phone) =>
 		dbContext.Users.AnyAsync(u => u.Phone == phone);
 
+	/// <summary>
+	/// Returns whether or not a user with the given id exists in the database.
+	/// </summary>
+	/// <returns>True if the user exists or false if he doesn't.</returns>
+	public Task<bool> DoesUserExist(int id) =>
+		dbContext.Users.AnyAsync(u => u.Id == id);
+
 	public Task<UserEntity?> GetUserNoTracking(string phone) =>
 		dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Phone == phone);
 
@@ -62,4 +69,12 @@ public class UserRepository(AppDbContext dbContext) : IUserRepository
 
 	public Task<UserEntity?> GetUserNoTracking(int userId) =>
 		dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+
+	/// <summary>
+	/// Gets the users which correspond to the given ids.
+	/// </summary>
+	/// <param name="userIds">The user ids of the users requested.</param>
+	/// <returns>Array of user entities.</returns>
+	public Task<UserEntity[]> GetUsers(int[] userIds) =>
+		dbContext.Users.Where(u => userIds.Any(ui => ui == u.Id)).ToArrayAsync();
 }
