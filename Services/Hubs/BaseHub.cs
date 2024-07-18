@@ -44,14 +44,14 @@ public class BaseHub(AppDbContext dbContext) : Hub
 	public async void SendMessage(SendMessageEvent sendMessageEvent)
 	{
 		int userId = Context.User.Id();
-		MessageEntity messageEntity = new(sendMessageEvent.Message, userId, sendMessageEvent.ChatId, DateTime.UtcNow);
+		MessageEntity messageEntity = new(sendMessageEvent.Content, userId, sendMessageEvent.ChatId, DateTime.UtcNow);
 		messageEntity = dbContext.Messages.Add(messageEntity).Entity;
 		await dbContext.SaveChangesAsync();
 
 		int[] userIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync()).ToArray();
 
 		NewMessageCreatedEvent newMessageCreatedEvent = new(messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt);
-		NewMessageEvent newMessageEvent = new(messageEntity.Id, userId, messageEntity.Id, sendMessageEvent.Message, messageEntity.CreatedAt);
+		NewMessageEvent newMessageEvent = new(messageEntity.Id, userId, messageEntity.Id, sendMessageEvent.Content, messageEntity.CreatedAt);
 
 		await Clients
 			.GetUserById(userId)
