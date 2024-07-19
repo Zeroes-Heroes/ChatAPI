@@ -1,7 +1,12 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Database.Context;
+using Database.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Services.Extensions;
+using Services.Hubs.Models;
 using Services.Utilities.Statics;
-using System.Security.Claims;
 
 namespace Services.Hubs;
 
@@ -35,13 +40,31 @@ Other things to note:
 */
 
 [Authorize]
-public class BaseHub : Hub
+public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 {
-	public Task SendMessage(int toUserId, string message)
+	[HubMethodName("send-message")]
+	public async Task SendMessage(SendMessageEvent sendMessageEvent)
 	{
-		string? fromUserId = Context.User?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-		return Clients
-			.GetUserById(toUserId)
-			.SendAsync(LiveEvents.NewMessage, fromUserId, message);
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+
+		AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+		int senderId = Context.User.Id();
+		MessageEntity messageEntity = new(sendMessageEvent.Content, senderId, sendMessageEvent.ChatId, DateTime.UtcNow);
+		messageEntity = dbContext.Messages.Add(messageEntity).Entity;
+		await dbContext.SaveChangesAsync();
+
+		int[] userIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync()).Except([senderId]).ToArray();
+
+		NewMessageCreatedEvent newMessageCreatedEvent = new(messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt);
+		NewMessageEvent newMessageEvent = new(messageEntity.Id, senderId, messageEntity.ChatId, sendMessageEvent.Content, messageEntity.CreatedAt);
+
+		await Clients
+			.GetUserById(senderId)
+			.SendAsync(LiveEvents.NewMessageCreated, newMessageCreatedEvent);
+
+		await Clients
+			.GetUsersByIds(userIds)
+			.SendAsync(LiveEvents.NewMessage, newMessageEvent);
 	}
 }
