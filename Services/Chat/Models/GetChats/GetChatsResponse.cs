@@ -1,3 +1,3 @@
 ﻿namespace Services.Chat.Models.GetChats;
 
-public record GetChatsResponse(int Id, string Name, int[] UserIds);
+public record GetChatsResponse(int ChatId, string Name, int[] UserIds);
