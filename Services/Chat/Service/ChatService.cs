@@ -64,7 +64,6 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 
 	public void SendEventChatCreated(ChatCreatedEvent chatCreatedEvent)
 	{
-		foreach (int id in chatCreatedEvent.UserIds)
-			hubContext.Clients.GetUserById(id).SendAsync(ChatCreated, chatCreatedEvent);
+		hubContext.Clients.GetUsersByIds(chatCreatedEvent.UserIds).SendAsync(ChatCreated, chatCreatedEvent);
 	}
 }

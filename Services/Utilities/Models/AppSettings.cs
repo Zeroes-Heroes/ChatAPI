@@ -2,10 +2,11 @@
 
 public class AppSettings
 {
-	public required string TokenSigningKey { get; set; }
-	public required string TokenIssuer { get; set; }
-	public required string TokenAudience { get; set; }
-	public required string TwillioAuthToken { get; set; }
-	public required string TwillioAccountSid { get; set; }
-	public required string TwillioVerificationSid { get; set; }
+	public string ASPNETCORE_ENVIRONMENT { get; set; }
+	public string TokenSigningKey { get; set; }
+	public string TokenIssuer { get; set; }
+	public string TokenAudience { get; set; }
+	public string TwillioAuthToken { get; set; }
+	public string TwillioAccountSid { get; set; }
+	public string TwillioVerificationSid { get; set; }
 }
