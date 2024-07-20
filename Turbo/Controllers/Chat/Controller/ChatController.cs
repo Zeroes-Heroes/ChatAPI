@@ -13,7 +13,7 @@ namespace Turbo.Controllers.Chat.Controller
 	[Authorize]
 	public class ChatController(IChatService chatService) : ControllerBase
 	{
-		[HttpPost]
+		[HttpPost("create-chat")]
 		public async Task<IActionResult> CreateChat(CreateChatRequest createChatRequestModel)
 		{
 			Result result = await chatService.CreateChat(createChatRequestModel);
@@ -21,7 +21,7 @@ namespace Turbo.Controllers.Chat.Controller
 			return StatusCode(result.StatusCode, result.Error);
 		}
 
-		[HttpGet]
+		[HttpGet("get-chats")]
 		public async Task<ActionResult<GetChatsResponse[]>> GetChats()
 		{
 			Result<GetChatsResponse[]> result = await chatService.GetChats(User.Id());
