@@ -38,7 +38,7 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 		if (doesChatExist)
 			return Result.Failure("Chat with the given users already exists.", HttpStatusCode.Conflict);
 
-		ChatEntity chatEntity = new(createChatRequest.Name, userEntities);
+		ChatEntity chatEntity = new(createChatRequest.ChatName, userEntities);
 		chatEntity = await chatRepository.AddChat(chatEntity);
 		await chatRepository.SaveChangesAsync();
 
@@ -64,6 +64,7 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 
 	public void SendEventChatCreated(ChatCreatedEvent chatCreatedEvent)
 	{
-		hubContext.Clients.GetUsersByIds(chatCreatedEvent.UserIds).SendAsync(ChatCreated, chatCreatedEvent);
+		foreach (int id in chatCreatedEvent.UserIds)
+			hubContext.Clients.GetUserById(id).SendAsync(ChatCreated, chatCreatedEvent);
 	}
 }

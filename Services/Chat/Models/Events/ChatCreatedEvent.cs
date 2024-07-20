@@ -1,4 +1,4 @@
 ﻿namespace Services.Chat.Models.Events
 {
-	public record ChatCreatedEvent(int Id, string Name, int[] UserIds);
+	public record ChatCreatedEvent(int ChatId, string ChatName, int[] UserIds);
 }

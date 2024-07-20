@@ -3,5 +3,5 @@
 public class CreateChatRequest
 {
 	public int[] UserIds { get; set; }
-	public string? Name { get; set; }
+	public string? ChatName { get; set; }
 }
