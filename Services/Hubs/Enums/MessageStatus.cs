@@ -2,7 +2,7 @@
 {
 	public enum MessageStatus
 	{
-		Send,
+		Sent,
 		Received,
 		Seen
 	}

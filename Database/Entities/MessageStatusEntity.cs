@@ -4,18 +4,18 @@ namespace Database.Entities;
 
 public class MessageStatusEntity
 {
-	public MessageStatusEntity(int messageId, int receiverId, int status, DateTime timeStamp)
+	public MessageStatusEntity(int messageId, int receiverId, int status, DateTime timestamp)
 	{
 		MessageId = messageId;
 		ReceiverId = receiverId;
 		Status = status;
-		TimeStamp = timeStamp;
+		Timestamp = timestamp;
 	}
 
 	public int MessageId { get; set; }
 	public int ReceiverId { get; set; }
 	public int Status { get; set; }
-	public DateTime TimeStamp { get; set; }
+	public DateTime Timestamp { get; set; }
 
 	[ForeignKey(nameof(MessageId))]
 	public MessageEntity Message { get; set; }
