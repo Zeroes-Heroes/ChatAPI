@@ -43,10 +43,9 @@ Other things to note:
 public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 {
 	[HubMethodName("send-message")]
-	public async Task SendMessage(SendMessageEvent sendMessageEvent)
+	public async Task SendMessage(SendMessage sendMessageEvent)
 	{
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
-
 		AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
 		int senderId = Context.User.Id();
@@ -66,5 +65,34 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		await Clients
 			.GetUsersByIds(userIds)
 			.SendAsync(LiveEvents.NewMessage, newMessageEvent);
+	}
+
+	[HubMethodName("message-status-update")]
+	public async void MessageStatusUpdate(MessageStatusUpdate messageStatus)
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+		int receiverId = Context.User.Id();
+
+		MessageEntity[] messageEntities =
+			await dbContext.Messages.Where(m => m.ChatId == messageStatus.ChatId && !m.MessageStatusEntities.Any(ms => ms.Status >= (int)messageStatus.Status && ms.ReceiverId == receiverId)).ToArrayAsync();
+
+		foreach (MessageEntity messageEntity in messageEntities)
+		{
+			MessageStatusEntity[] messageStatusEntities = messageEntities.Select(m => new MessageStatusEntity(m.Id, receiverId, (int)messageStatus.Status, DateTime.UtcNow)).ToArray();
+
+			dbContext.MessagesStatus.AddRange(messageStatusEntities);
+		}
+
+		await dbContext.SaveChangesAsync();
+
+		MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageStatus.ChatId, receiverId, messageStatus.Status, DateTime.UtcNow);
+
+		int[] sendersIds = messageEntities.Select(m => m.SenderId).ToArray();
+
+		await Clients
+			.GetUsersByIds(sendersIds)
+			.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
 	}
 }

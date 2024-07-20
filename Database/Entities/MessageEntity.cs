@@ -22,5 +22,7 @@ namespace Database.Entities
 
 		[ForeignKey(nameof(ChatId))]
 		public virtual ChatEntity? Chat { get; set; }
+
+		public ICollection<MessageStatusEntity> MessageStatusEntities { get; set; } = [];
 	}
 }

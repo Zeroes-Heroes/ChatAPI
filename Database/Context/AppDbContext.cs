@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<CountryCodesEntity> CountryCodes { get; set; }
 	public DbSet<ChatEntity> Chats { get; set; }
 	public DbSet<MessageEntity> Messages { get; set; }
+	public DbSet<MessageStatusEntity> MessagesStatus { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -24,5 +25,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new FriendshipConfiguration());
 		modelBuilder.ApplyConfiguration(new CountryCodesConfiguration());
 		modelBuilder.ApplyConfiguration(new ChatEntityConfiguration());
+		modelBuilder.ApplyConfiguration(new MessageStatusEntityConfiguration());
 	}
 }

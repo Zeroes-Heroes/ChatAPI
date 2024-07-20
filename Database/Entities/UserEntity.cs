@@ -46,4 +46,5 @@ public class UserEntity
 	public virtual ICollection<FriendshipEntity> SentFriendships { get; set; } = [];
 	public virtual ICollection<FriendshipEntity> ReceivedFriendships { get; set; } = [];
 	public virtual ICollection<ChatEntity> Chats { get; set; } = [];
+	public ICollection<MessageStatusEntity> MessageStatusEntities { get; set; } = [];
 };

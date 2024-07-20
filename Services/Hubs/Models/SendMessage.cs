@@ -1,6 +1,6 @@
 ﻿namespace Services.Hubs.Models;
 
-public class SendMessageEvent
+public class SendMessage
 {
 	public string Content { get; set; }
 	public int ChatId { get; set; }
