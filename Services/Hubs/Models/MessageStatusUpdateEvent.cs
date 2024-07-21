@@ -15,8 +15,8 @@ public class MessageStatusUpdateEvent
 
 	}
 
-	public int ChatId { get; }
-	public int ReceiverId { get; }
-	public int Status { get; }
-	public string Timestamp { get; }
+	public int ChatId { get; set; }
+	public int ReceiverId { get; set; }
+	public int Status { get; set; }
+	public string Timestamp { get; set; }
 }
