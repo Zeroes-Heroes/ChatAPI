@@ -68,7 +68,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 	}
 
 	[HubMethodName("message-status-update")]
-	public async void MessageStatusUpdate(MessageStatusUpdate messageStatus)
+	public async Task MessageStatusUpdate(MessageStatusUpdate messageStatus)
 	{
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -78,12 +78,9 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		MessageEntity[] messageEntities =
 			await dbContext.Messages.Where(m => m.ChatId == messageStatus.ChatId && !m.MessageStatusEntities.Any(ms => ms.Status >= (int)messageStatus.Status && ms.ReceiverId == receiverId)).ToArrayAsync();
 
-		foreach (MessageEntity messageEntity in messageEntities)
-		{
-			MessageStatusEntity[] messageStatusEntities = messageEntities.Select(m => new MessageStatusEntity(m.Id, receiverId, (int)messageStatus.Status, DateTime.UtcNow)).ToArray();
+		MessageStatusEntity[] messageStatusEntities = messageEntities.Select(m => new MessageStatusEntity(m.Id, receiverId, (int)messageStatus.Status, DateTime.UtcNow)).ToArray();
 
-			dbContext.MessagesStatus.AddRange(messageStatusEntities);
-		}
+		dbContext.MessagesStatus.AddRange(messageStatusEntities);
 
 		await dbContext.SaveChangesAsync();
 

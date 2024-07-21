@@ -5,6 +5,6 @@ namespace Services.Hubs.Models
 	public class MessageStatusUpdate
 	{
 		public int ChatId { get; set; }
-		public MessageStatus Status { get; set; }
+		public int Status { get; set; }
 	}
 }
