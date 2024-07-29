@@ -16,7 +16,7 @@ namespace Services.Repositories.Chat.Repository
 		}
 
 		public Task<bool> DoesChatExist(int[] userIds) =>
-			dbContext.Chats.AnyAsync(c => c.Users.All(u => userIds.Any(ui => ui == u.Id)));
+			dbContext.Chats.AnyAsync(c => userIds.All(ui => c.Users.Any(cu => cu.Id == ui)));
 
 		public Task<ChatEntity[]> GetChats(int userId) =>
 			dbContext.Chats.Where(c => c.Users.Any(cu => cu.Id == userId)).Include(c => c.Users).ToArrayAsync();
