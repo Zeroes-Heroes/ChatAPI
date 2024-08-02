@@ -12,9 +12,15 @@ public class MessageStatusEntity
 		Timestamp = timestamp;
 	}
 
-	public int MessageId { get; set; }
+    public MessageStatusEntity()
+    {
+			
+    }
+
+    public int MessageId { get; set; }
 	public int ReceiverId { get; set; }
 	public int Status { get; set; }
+	public bool StatusUpdateDeliveryConfirmed{ get; set; }
 	public DateTime Timestamp { get; set; }
 
 	[ForeignKey(nameof(MessageId))]

@@ -1,4 +1,6 @@
-﻿namespace Services.Hubs.Models
+﻿using System.Globalization;
+
+namespace Services.Hubs.Models
 {
 	public class NewMessageEvent
 	{
@@ -8,7 +10,7 @@
 			SenderUserId = senderUserId;
 			ChatId = chatId;
 			Content = content;
-			CreatedAt = createdAt.ToUniversalTime().ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'");
+			CreatedAt = createdAt.ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'", CultureInfo.InvariantCulture);
 		}
 
 		public NewMessageEvent()
