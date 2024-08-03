@@ -56,7 +56,8 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		int receiverId = Context.User.Id();
 		DateTime now = DateTime.UtcNow;
 
-		MessageEntity[] undeliveredMessages = await dbContext.Messages.Where(m => m.MessageStatusEntities.Any(ms => ms.Status < 1 && ms.ReceiverId == receiverId)).ToArrayAsync();
+		MessageEntity[] undeliveredMessages =
+			await dbContext.Messages.Where(m => m.Chat.Users.Select(u => u.Id).Contains(receiverId) && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == 1)).ToArrayAsync();
 		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, 1, now)).ToArray();
 
 		foreach (MessageEntity undeliveredMessage in undeliveredMessages)
@@ -81,8 +82,11 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 
-		string cacheKey = string.Format(CacheKeys.ConnectionEstablished, Context.User.Id());
-		await cache.RemoveAsync(cacheKey);
+		string connectionEstablishedKey = string.Format(CacheKeys.ConnectionEstablished, Context.User.Id());
+		string chatEnteredKey = string.Format(CacheKeys.ChatEntered, Context.User.Id());
+		await cache.RemoveAsync(connectionEstablishedKey);
+		await cache.RemoveAsync(chatEnteredKey);
+
 		await base.OnDisconnectedAsync(exception);
 	}
 
@@ -167,10 +171,11 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		int receiverId = Context.User.Id();
 		DateTime now = DateTime.UtcNow;
 
-		MessageEntity[] undeliveredMessages = await dbContext.Messages.Where(m => m.MessageStatusEntities.Any(ms => ms.Status < 2 && ms.ReceiverId == receiverId)).ToArrayAsync();
-		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, 2, now)).ToArray();
+		MessageEntity[] unSeenMessages =
+				await dbContext.Messages.Where(m => m.ChatId == chatEnteredEvent.ChatId && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == 2)).ToArrayAsync();
+		MessageStatusEntity[] messageStatusEntities = unSeenMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, 2, now)).ToArray();
 
-		foreach (MessageEntity undeliveredMessage in undeliveredMessages)
+		foreach (MessageEntity undeliveredMessage in unSeenMessages)
 		{
 			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, 2, now);
 
