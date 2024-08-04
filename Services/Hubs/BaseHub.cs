@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
+using Services.Hubs.Enums;
 using Services.Hubs.Models;
 using Services.Utilities.Statics;
 
@@ -62,7 +63,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		foreach (MessageEntity undeliveredMessage in undeliveredMessages)
 		{
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, 1, now);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, MessageStatus.Received, now);
 
 			await Clients
 				.GetUserById(undeliveredMessage.SenderId)
@@ -127,21 +128,21 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			bool isUserOnline = (await cache.GetAsync(connectionEstablishedCacheKey)) != null;
 
 			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, userId, 2, DateTime.UtcNow);
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, userId, default, DateTime.UtcNow);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, userId, MessageStatus.Sent, DateTime.UtcNow);
 
 			if (isUserInChat)
 			{
 				messageStatusEntity.Status = 2;
-				messageStatusUpdateEvent.Status = 2;
+				messageStatusUpdateEvent.Status = MessageStatus.Seen;
 			}
 			else if (isUserOnline)
 			{
 				messageStatusEntity.Status = 1;
-				messageStatusUpdateEvent.Status = 1;
+				messageStatusUpdateEvent.Status = MessageStatus.Received;
 			}
 			else
 			{
-				messageStatusEntity.Status = 0;
+				messageStatusEntity.Status = (int)MessageStatus.Sent;
 			}
 
 			messageStatusEntities.Add(messageStatusEntity);
@@ -177,7 +178,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		foreach (MessageEntity undeliveredMessage in unSeenMessages)
 		{
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, 2, now);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, MessageStatus.Seen, now);
 
 			await Clients
 				.GetUserById(undeliveredMessage.SenderId)
@@ -211,7 +212,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		DateTime now = DateTime.UtcNow;
 
 		MessageStatusEntity[] messageStatusEntities =
-			await dbContext.MessagesStatus.Where(ms => ms.Message.ChatId == messageStatusUpdateConfirmation.ChatId && !ms.StatusUpdateDeliveryConfirmed && ms.Status == messageStatusUpdateConfirmation.Status).ToArrayAsync();
+			await dbContext.MessagesStatus.Where(ms => ms.Message.ChatId == messageStatusUpdateConfirmation.ChatId && !ms.StatusUpdateDeliveryConfirmed && ms.Status == (int)messageStatusUpdateConfirmation.Status).ToArrayAsync();
 
 
 		foreach (MessageStatusEntity messageStatusEntity in messageStatusEntities)

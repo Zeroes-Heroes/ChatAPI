@@ -1,4 +1,6 @@
 ﻿using Database.Context;
+using MessagePack;
+using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +13,7 @@ using Services.Chat.Interface;
 using Services.Chat.Service;
 using Services.Friendship.Interface;
 using Services.Friendship.Service;
+using Services.Hubs.Resolvers;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
 using Services.Repositories.Friendship.Interface;
@@ -158,7 +161,14 @@ public static class ServiceCollectionExtension
 			.AddScoped<IChatService, ChatService>()
 			.AddScoped<IChatRepository, ChatRepository>()
 			.AddSignalR()
-				.AddMessagePackProtocol()
+				 .AddMessagePackProtocol(options =>
+				 {
+					 options.SerializerOptions = MessagePackSerializerOptions.Standard
+						 .WithResolver(CompositeResolver.Create(
+							  CustomResolver.Instance,
+							  ContractlessStandardResolver.Instance,
+							  StandardResolver.Instance));
+				 })
 			.Services;
 
 	public static IServiceCollection InitializeTwilio(this IServiceCollection service, IConfiguration configuration)

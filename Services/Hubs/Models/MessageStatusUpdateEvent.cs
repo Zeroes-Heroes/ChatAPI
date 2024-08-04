@@ -1,15 +1,15 @@
-﻿using System.Globalization;
+﻿using Services.Hubs.Enums;
 
 namespace Services.Hubs.Models;
 
 public class MessageStatusUpdateEvent
 {
-	public MessageStatusUpdateEvent(int chatId, int receiverId, int status, DateTime timestamp)
+	public MessageStatusUpdateEvent(int chatId, int receiverId, MessageStatus status, DateTime timestamp)
 	{
 		ChatId = chatId;
 		ReceiverId = receiverId;
 		Status = status;
-		Timestamp = timestamp.ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'", CultureInfo.InvariantCulture);
+		Timestamp = timestamp;
 	}
 
 	public MessageStatusUpdateEvent()
@@ -19,6 +19,6 @@ public class MessageStatusUpdateEvent
 
 	public int ChatId { get; set; }
 	public int ReceiverId { get; set; }
-	public int Status { get; set; }
-	public string Timestamp { get; set; }
+	public MessageStatus Status { get; set; }
+	public DateTime Timestamp { get; set; }
 }
