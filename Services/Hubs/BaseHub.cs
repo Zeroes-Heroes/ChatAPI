@@ -190,6 +190,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		int chatId = chatEnteredEvent.ChatId;
 		ClaimsPrincipal? user = Context.User;
+		DateTime now = DateTime.UtcNow;
 
 		if (user == null)
 			return;
@@ -198,27 +199,10 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		string cacheKey = string.Format(CacheKeys.ChatEntered, receiverId);
 		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
 
-		DateTime now = DateTime.UtcNow;
-
 		MessageEntity[] unSeenMessages =
 				await dbContext.Messages
 				.Where(m => m.ChatId == chatEnteredEvent.ChatId && m.SenderId != receiverId && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == (int)MessageStatus.Seen && ms.StatusUpdateDeliveryConfirmed))
 				.ToArrayAsync();
-
-		MessageStatusEntity[] messageStatusEntities = unSeenMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, 2, now)).ToArray();
-
-		foreach (MessageEntity unSeenMessage in unSeenMessages)
-		{
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(unSeenMessage.ChatId, receiverId, MessageStatus.Seen, now);
-
-			await Clients
-				.GetUserById(unSeenMessage.SenderId)
-				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
-
-		}
-
-		dbContext.AddRange(messageStatusEntities);
-		await dbContext.SaveChangesAsync();
 	}
 
 	[HubMethodName("chat-exited")]
