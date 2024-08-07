@@ -3,6 +3,7 @@ using Database.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
 using Services.Hubs.Models;
@@ -42,11 +43,60 @@ Other things to note:
 [Authorize]
 public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 {
+	public async override Task OnConnectedAsync()
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
+		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
+
+		string cacheKey = string.Format(CacheKeys.ConnectionEstablished, Context.User.Id());
+		await cache.SetAsync(cacheKey, true, DateTime.UtcNow.AddDays(1));
+
+		int receiverId = Context.User.Id();
+		DateTime now = DateTime.UtcNow;
+
+		MessageEntity[] undeliveredMessages =
+			await dbContext.Messages.Where(m => m.Chat.Users.Select(u => u.Id).Contains(receiverId) && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == 1)).ToArrayAsync();
+		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, 1, now)).ToArray();
+
+		foreach (MessageEntity undeliveredMessage in undeliveredMessages)
+		{
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, 1, now);
+
+			await Clients
+				.GetUserById(undeliveredMessage.SenderId)
+				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+
+		}
+
+		dbContext.AddRange(messageStatusEntities);
+		await dbContext.SaveChangesAsync();
+
+		await base.OnConnectedAsync();
+	}
+
+	public async override Task OnDisconnectedAsync(Exception? exception)
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
+
+		string connectionEstablishedKey = string.Format(CacheKeys.ConnectionEstablished, Context.User.Id());
+		string chatEnteredKey = string.Format(CacheKeys.ChatEntered, Context.User.Id());
+		await cache.RemoveAsync(connectionEstablishedKey);
+		await cache.RemoveAsync(chatEnteredKey);
+
+		await base.OnDisconnectedAsync(exception);
+	}
+
 	[HubMethodName("send-message")]
 	public async Task SendMessage(SendMessage sendMessageEvent)
 	{
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
-		AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
+		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
 
 		int senderId = Context.User.Id();
 		MessageEntity messageEntity = new(sendMessageEvent.Content, senderId, sendMessageEvent.ChatId, DateTime.UtcNow);
@@ -65,31 +115,111 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		await Clients
 			.GetUsersByIds(userIds)
 			.SendAsync(LiveEvents.NewMessage, newMessageEvent);
-	}
 
-	[HubMethodName("message-status-update")]
-	public async Task MessageStatusUpdate(MessageStatusUpdate messageStatus)
-	{
-		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
-		AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+		List<MessageStatusEntity> messageStatusEntities = [];
 
-		int receiverId = Context.User.Id();
+		foreach (int userId in userIds)
+		{
+			string chatEnteredCacheKey = string.Format(CacheKeys.ChatEntered, userId);
+			string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
+			byte[]? bytes = (await cache.GetAsync(chatEnteredCacheKey));
+			bool isUserInChat = bytes != null;
+			bool isUserOnline = (await cache.GetAsync(connectionEstablishedCacheKey)) != null;
 
-		MessageEntity[] messageEntities =
-			await dbContext.Messages.Where(m => m.ChatId == messageStatus.ChatId && !m.MessageStatusEntities.Any(ms => ms.Status >= (int)messageStatus.Status && ms.ReceiverId == receiverId)).ToArrayAsync();
+			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, userId, 2, DateTime.UtcNow);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, userId, default, DateTime.UtcNow);
 
-		MessageStatusEntity[] messageStatusEntities = messageEntities.Select(m => new MessageStatusEntity(m.Id, receiverId, (int)messageStatus.Status, DateTime.UtcNow)).ToArray();
+			if (isUserInChat)
+			{
+				messageStatusEntity.Status = 2;
+				messageStatusUpdateEvent.Status = 2;
+			}
+			else if (isUserOnline)
+			{
+				messageStatusEntity.Status = 1;
+				messageStatusUpdateEvent.Status = 1;
+			}
+			else
+			{
+				messageStatusEntity.Status = 0;
+			}
+
+			messageStatusEntities.Add(messageStatusEntity);
+
+			await Clients
+				.GetUserById(senderId)
+				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+		}
 
 		dbContext.MessagesStatus.AddRange(messageStatusEntities);
-
 		await dbContext.SaveChangesAsync();
+	}
 
-		MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageStatus.ChatId, receiverId, messageStatus.Status, DateTime.UtcNow);
+	[HubMethodName("chat-entered")]
+	public async Task ChatEntered(ChatEnteredEvent chatEnteredEvent)
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
+		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
 
-		int[] sendersIds = messageEntities.Select(m => m.SenderId).ToArray();
+		int chatId = chatEnteredEvent.ChatId;
 
-		await Clients
-			.GetUsersByIds(sendersIds)
-			.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+		string cacheKey = string.Format(CacheKeys.ChatEntered, Context.User.Id());
+		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
+
+		int receiverId = Context.User.Id();
+		DateTime now = DateTime.UtcNow;
+
+		MessageEntity[] unSeenMessages =
+				await dbContext.Messages.Where(m => m.ChatId == chatEnteredEvent.ChatId && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == 2)).ToArrayAsync();
+		MessageStatusEntity[] messageStatusEntities = unSeenMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, 2, now)).ToArray();
+
+		foreach (MessageEntity undeliveredMessage in unSeenMessages)
+		{
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, 2, now);
+
+			await Clients
+				.GetUserById(undeliveredMessage.SenderId)
+				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+
+		}
+
+		dbContext.AddRange(messageStatusEntities);
+		await dbContext.SaveChangesAsync();
+	}
+
+	[HubMethodName("chat-exited")]
+	public async Task ChatExited()
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
+
+		string cacheKey = string.Format(CacheKeys.ChatEntered, Context.User.Id());
+		await cache.RemoveAsync(cacheKey);
+	}
+
+	[HubMethodName("message-status-update-received")]
+	public async Task MessageStatusUpdateReceived(MessageStatusUpdateConfirmation messageStatusUpdateConfirmation)
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
+
+		int senderId = Context.User.Id();
+		DateTime now = DateTime.UtcNow;
+
+		MessageStatusEntity[] messageStatusEntities =
+			await dbContext.MessagesStatus.Where(ms => ms.Message.ChatId == messageStatusUpdateConfirmation.ChatId && !ms.StatusUpdateDeliveryConfirmed && ms.Status == messageStatusUpdateConfirmation.Status).ToArrayAsync();
+
+
+		foreach (MessageStatusEntity messageStatusEntity in messageStatusEntities)
+		{
+			messageStatusEntity.StatusUpdateDeliveryConfirmed = true;
+		}
+
+		dbContext.UpdateRange(messageStatusEntities);
+		await dbContext.SaveChangesAsync();
 	}
 }

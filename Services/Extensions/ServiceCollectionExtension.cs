@@ -86,7 +86,8 @@ public static class ServiceCollectionExtension
 			string username = configuration["Username"];
 			string password = configuration["Password"];
 			string database = configuration["Database"];
-			string connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database}";
+			string includeErrorDetails = configuration["IncludeErrorDetails"];
+			string connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database};Include Error Detail={includeErrorDetails}";
 
 			options
 			.UseNpgsql(connectionString)

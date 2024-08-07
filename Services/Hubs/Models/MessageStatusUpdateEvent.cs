@@ -1,4 +1,6 @@
-﻿namespace Services.Hubs.Models;
+﻿using System.Globalization;
+
+namespace Services.Hubs.Models;
 
 public class MessageStatusUpdateEvent
 {
@@ -7,7 +9,7 @@ public class MessageStatusUpdateEvent
 		ChatId = chatId;
 		ReceiverId = receiverId;
 		Status = status;
-		Timestamp = timestamp.ToUniversalTime().ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'");
+		Timestamp = timestamp.ToString("ddd, dd MMM yyyy HH:mm:ss 'GMT'", CultureInfo.InvariantCulture);
 	}
 
 	public MessageStatusUpdateEvent()
