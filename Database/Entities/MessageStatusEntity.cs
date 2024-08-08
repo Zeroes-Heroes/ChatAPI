@@ -1,10 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+﻿using Database.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Database.Entities;
 
 public class MessageStatusEntity
 {
-	public MessageStatusEntity(int messageId, int receiverId, int status, DateTime timestamp)
+	public MessageStatusEntity(int messageId, int receiverId, MessageStatus status, DateTime timestamp)
 	{
 		MessageId = messageId;
 		ReceiverId = receiverId;
@@ -12,15 +13,15 @@ public class MessageStatusEntity
 		Timestamp = timestamp;
 	}
 
-    public MessageStatusEntity()
-    {
-			
-    }
+	public MessageStatusEntity()
+	{
 
-    public int MessageId { get; set; }
+	}
+
+	public int MessageId { get; set; }
 	public int ReceiverId { get; set; }
-	public int Status { get; set; }
-	public bool StatusUpdateDeliveryConfirmed{ get; set; }
+	public MessageStatus Status { get; set; }
+	public bool StatusUpdateDeliveryConfirmed { get; set; }
 	public DateTime Timestamp { get; set; }
 
 	[ForeignKey(nameof(MessageId))]

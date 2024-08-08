@@ -24,11 +24,10 @@ public class Program
 				options.AddPolicy("AllowOrigin", builder =>
 				{
 					builder
-						//.WithOrigins("*", "null")
-						.AllowAnyOrigin()
-						.AllowAnyHeader()
-						.AllowAnyMethod();
-					//.AllowCredentials();
+					.SetIsOriginAllowed(_ => true)
+					.AllowAnyMethod()
+					.AllowAnyHeader()
+					.AllowCredentials();
 				});
 			})
 			.ConfigureAppSettings(builder.Configuration)

@@ -1,7 +1,9 @@
-﻿namespace Services.Hubs.Models;
+﻿using Database.Enums;
+
+namespace Services.Hubs.Models;
 
 public class MessageStatusUpdateConfirmation
 {
 	public int ChatId { get; set; }
-	public int Status { get; set; }
+	public MessageStatus Status { get; set; }
 }
