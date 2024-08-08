@@ -76,7 +76,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		foreach (MessageEntity undeliveredMessage in undeliveredMessages)
 		{
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, MessageStatus.Received, now);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(undeliveredMessage.ChatId, receiverId, MessageStatus.Received, now, undeliveredMessage.Id);
 
 			await Clients
 				.GetUserById(undeliveredMessage.SenderId)
@@ -152,7 +152,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			bool isUserOnline = (await cache.GetAsync(connectionEstablishedCacheKey)) != null;
 
 			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, userId, default, DateTime.UtcNow);
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, userId, MessageStatus.Sent, DateTime.UtcNow);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, userId, MessageStatus.Sent, DateTime.UtcNow, messageStatusEntity.MessageId);
 
 			if (isUserInChat)
 			{
@@ -203,6 +203,20 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				await dbContext.Messages
 				.Where(m => m.ChatId == chatEnteredEvent.ChatId && m.SenderId != receiverId && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == MessageStatus.Seen && ms.StatusUpdateDeliveryConfirmed))
 				.ToArrayAsync();
+
+		MessageStatusEntity[] messageStatusEntities = unSeenMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Seen, now)).ToArray();
+
+		foreach (MessageEntity unSeenMessage in unSeenMessages)
+		{
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(unSeenMessage.ChatId, receiverId, MessageStatus.Seen, now, unSeenMessage.Id);
+
+			await Clients
+				.GetUserById(unSeenMessage.SenderId)
+				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+		}
+
+		dbContext.AddRange(messageStatusEntities);
+		await dbContext.SaveChangesAsync();
 	}
 
 	[HubMethodName("chat-exited")]
