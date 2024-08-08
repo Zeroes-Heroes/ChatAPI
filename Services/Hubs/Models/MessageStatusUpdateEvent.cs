@@ -1,4 +1,4 @@
-﻿using Services.Hubs.Enums;
+﻿using Database.Enums;
 
 namespace Services.Hubs.Models;
 

@@ -21,7 +21,7 @@ namespace Database.Entities
 		public DateTime CreatedAt { get; set; }
 
 		[ForeignKey(nameof(ChatId))]
-		public ChatEntity Chat { get; set; } = new ChatEntity();
+		public ChatEntity Chat { get; set; }
 
 		public ICollection<MessageStatusEntity> MessageStatusEntities { get; set; } = [];
 	}

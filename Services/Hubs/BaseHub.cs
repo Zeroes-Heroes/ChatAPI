@@ -1,12 +1,12 @@
 ﻿using Database.Context;
 using Database.Entities;
+using Database.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
-using Services.Hubs.Enums;
 using Services.Hubs.Models;
 using Services.Utilities.Statics;
 using System.Security.Claims;
@@ -69,10 +69,10 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				m.Chat.Users.Select(u => u.Id).Contains(receiverId)
 				&& m.SenderId != receiverId
 				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId
-				&& ms.Status == (int)MessageStatus.Received && ms.StatusUpdateDeliveryConfirmed))
+					&& ms.Status == MessageStatus.Received && ms.StatusUpdateDeliveryConfirmed))
 			.ToArrayAsync();
 
-		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, (int)MessageStatus.Received, now)).ToArray();
+		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Received, now)).ToArray();
 
 		foreach (MessageEntity undeliveredMessage in undeliveredMessages)
 		{
@@ -128,7 +128,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		messageEntity = dbContext.Messages.Add(messageEntity).Entity;
 		await dbContext.SaveChangesAsync();
 
-		int[] userIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync() ?? []).Except([senderId]).ToArray();
+		int[] receiversIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync() ?? []).Except([senderId]).ToArray();
 
 		NewMessageCreatedEvent newMessageCreatedEvent = new(messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt);
 		NewMessageEvent newMessageEvent = new(messageEntity.Id, senderId, messageEntity.ChatId, sendMessageEvent.Content, messageEntity.CreatedAt);
@@ -138,12 +138,12 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			.SendAsync(LiveEvents.NewMessageCreated, newMessageCreatedEvent);
 
 		await Clients
-			.GetUsersByIds(userIds)
+			.GetUsersByIds(receiversIds)
 			.SendAsync(LiveEvents.NewMessage, newMessageEvent);
 
 		List<MessageStatusEntity> messageStatusEntities = [];
 
-		foreach (int userId in userIds)
+		foreach (int userId in receiversIds)
 		{
 			string chatEnteredCacheKey = string.Format(CacheKeys.ChatEntered, userId);
 			string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
@@ -156,17 +156,17 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 			if (isUserInChat)
 			{
-				messageStatusEntity.Status = 2;
+				messageStatusEntity.Status = MessageStatus.Seen;
 				messageStatusUpdateEvent.Status = MessageStatus.Seen;
 			}
 			else if (isUserOnline)
 			{
-				messageStatusEntity.Status = 1;
+				messageStatusEntity.Status = MessageStatus.Received;
 				messageStatusUpdateEvent.Status = MessageStatus.Received;
 			}
 			else
 			{
-				messageStatusEntity.Status = (int)MessageStatus.Sent;
+				messageStatusEntity.Status = MessageStatus.Sent;
 			}
 
 			messageStatusEntities.Add(messageStatusEntity);
@@ -201,7 +201,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		MessageEntity[] unSeenMessages =
 				await dbContext.Messages
-				.Where(m => m.ChatId == chatEnteredEvent.ChatId && m.SenderId != receiverId && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == (int)MessageStatus.Seen && ms.StatusUpdateDeliveryConfirmed))
+				.Where(m => m.ChatId == chatEnteredEvent.ChatId && m.SenderId != receiverId && !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == MessageStatus.Seen && ms.StatusUpdateDeliveryConfirmed))
 				.ToArrayAsync();
 	}
 
@@ -236,7 +236,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		DateTime now = DateTime.UtcNow;
 
 		MessageStatusEntity[] messageStatusEntities =
-			await dbContext.MessagesStatus.Where(ms => ms.Message.ChatId == messageStatusUpdateConfirmation.ChatId && !ms.StatusUpdateDeliveryConfirmed && ms.Status == (int)messageStatusUpdateConfirmation.Status).ToArrayAsync();
+			await dbContext.MessagesStatus.Where(ms => ms.Message.ChatId == messageStatusUpdateConfirmation.ChatId && !ms.StatusUpdateDeliveryConfirmed && ms.Status == messageStatusUpdateConfirmation.Status).ToArrayAsync();
 
 
 		foreach (MessageStatusEntity messageStatusEntity in messageStatusEntities)
