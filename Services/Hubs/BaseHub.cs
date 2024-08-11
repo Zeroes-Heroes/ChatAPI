@@ -142,7 +142,8 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 
 		int senderId = user.Id();
-		MessageEntity messageEntity = new(sendMessageEvent.Content, senderId, sendMessageEvent.ChatId, DateTime.UtcNow);
+		int chatId = sendMessageEvent.ChatId;
+		MessageEntity messageEntity = new(sendMessageEvent.Content, senderId, chatId, DateTime.UtcNow);
 		messageEntity = dbContext.Messages.Add(messageEntity).Entity;
 		await dbContext.SaveChangesAsync();
 
@@ -163,14 +164,14 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		foreach (int receiverId in receiversIds)
 		{
-			string chatEnteredCacheKey = string.Format(CacheKeys.ChatEntered, receiverId); // Check in which chat is the user when saving the cache key
+			string chatEnteredCacheKey = string.Format(CacheKeys.ChatEntered, receiverId, chatId);
 			string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, receiverId);
 			byte[]? bytes = (await cache.GetAsync(chatEnteredCacheKey));
 			bool isUserInChat = bytes != null;
 			bool isUserOnline = (await cache.GetAsync(connectionEstablishedCacheKey)) != null;
 
 			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, receiverId, default, DateTime.UtcNow);
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, receiverId, MessageStatus.Sent, DateTime.UtcNow, [messageEntity.Id]);
+			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, receiverId, default, DateTime.UtcNow, [messageEntity.Id]);
 
 			if (isUserInChat)
 			{
@@ -181,10 +182,6 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			{
 				messageStatusEntity.Status = MessageStatus.Received;
 				messageStatusUpdateEvent.Status = MessageStatus.Received;
-			}
-			else
-			{
-				messageStatusEntity.Status = MessageStatus.Sent;
 			}
 
 			messageStatusEntities.Add(messageStatusEntity);
@@ -214,7 +211,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 
 		int receiverId = user.Id();
-		string cacheKey = string.Format(CacheKeys.ChatEntered, receiverId);
+		string cacheKey = string.Format(CacheKeys.ChatEntered, receiverId, chatId);
 		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
 
 		MessageEntity[] unSeenMessages =
@@ -260,7 +257,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 	}
 
 	[HubMethodName("chat-exited")]
-	public async Task ChatExited()
+	public async Task ChatExited(ChatExitedEvent chatExitedEvent)
 	{
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		IServiceProvider serviceProvider = scope.ServiceProvider;
@@ -270,7 +267,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		if (user == null)
 			return;
 
-		string cacheKey = string.Format(CacheKeys.ChatEntered, user.Id());
+		string cacheKey = string.Format(CacheKeys.ChatEntered, user.Id(), chatExitedEvent.ChatId);
 		await cache.RemoveAsync(cacheKey);
 	}
 
