@@ -172,6 +172,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, receiverId, default, DateTime.UtcNow);
 			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, receiverId, default, DateTime.UtcNow, [messageEntity.Id]);
+			messageStatusEntities.Add(messageStatusEntity);
 
 			if (isUserInChat)
 			{
@@ -183,8 +184,8 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				messageStatusEntity.Status = MessageStatus.Received;
 				messageStatusUpdateEvent.Status = MessageStatus.Received;
 			}
-
-			messageStatusEntities.Add(messageStatusEntity);
+			else
+				continue;
 
 			await Clients
 				.GetUserById(senderId)
