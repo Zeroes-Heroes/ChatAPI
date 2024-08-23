@@ -76,5 +76,5 @@ public class UserRepository(AppDbContext dbContext) : IUserRepository
 	/// <param name="userIds">The user ids of the users requested.</param>
 	/// <returns>Array of user entities.</returns>
 	public Task<UserEntity[]> GetUsers(int[] userIds) =>
-		dbContext.Users.Where(u => userIds.Any(ui => ui == u.Id)).ToArrayAsync();
+		dbContext.Users.Where(u => userIds.Contains(u.Id)).ToArrayAsync();
 }

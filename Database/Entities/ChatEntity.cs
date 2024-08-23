@@ -6,7 +6,7 @@ namespace Database.Entities
 	{
 		public ChatEntity() { }
 
-		public ChatEntity(string name, ICollection<UserEntity> users)
+		public ChatEntity(string? name, ICollection<UserEntity> users)
 		{
 			Name = name;
 			Users = users;

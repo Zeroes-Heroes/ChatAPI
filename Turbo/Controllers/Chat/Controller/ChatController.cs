@@ -17,7 +17,6 @@ namespace Turbo.Controllers.Chat.Controller
 		public async Task<IActionResult> CreateChat(CreateChatRequest createChatRequestModel)
 		{
 			Result result = await chatService.CreateChat(createChatRequestModel);
-
 			return StatusCode(result.StatusCode, result.Error);
 		}
 

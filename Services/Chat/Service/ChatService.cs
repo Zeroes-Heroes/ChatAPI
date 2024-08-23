@@ -18,25 +18,12 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 {
 	public async Task<Result> CreateChat(CreateChatRequest createChatRequest)
 	{
-		bool isTwoPeopleChat = createChatRequest.UserIds.Length == 2;
-
-		if (isTwoPeopleChat)
-		{
-			bool areUsersFriends = await friendshipRepository.AreUsersFriends(createChatRequest.UserIds);
-
-			if (!areUsersFriends)
-				return Result.Failure("Chats can only be created with friends.", HttpStatusCode.BadRequest);
-		}
-
 		UserEntity[] userEntities = await userRepository.GetUsers(createChatRequest.UserIds);
 
-		if (userEntities.Length < 2)
-			return Result.Failure("Can't create chat with less than two users.", HttpStatusCode.BadRequest);
-
-		bool doesChatExist = await chatRepository.DoesChatExist(createChatRequest.UserIds);
-
-		if (doesChatExist)
-			return Result.Failure("Chat with the given users already exists.", HttpStatusCode.Conflict);
+		Result? validationResult = await ValidateCreateChatRequest(createChatRequest, userEntities);
+		
+		if (validationResult is not null)
+			return validationResult;
 
 		ChatEntity chatEntity = new(createChatRequest.ChatName, userEntities);
 		chatEntity = await chatRepository.AddChat(chatEntity);
@@ -47,6 +34,30 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 
 		return Result.Success();
 	}
+
+	private async Task<Result?> ValidateCreateChatRequest(CreateChatRequest createChatRequest, UserEntity[] userEntities)
+	{
+		if (userEntities.Length < 2)
+			return Result.Failure("Can't create a chat with less than two users.", HttpStatusCode.BadRequest);
+
+		bool isTwoPeopleChat = createChatRequest.UserIds.Length == 2;
+
+		if (isTwoPeopleChat)
+		{
+			bool areUsersFriends = await friendshipRepository.AreUsersFriends(createChatRequest.UserIds);
+
+			if (!areUsersFriends)
+				return Result.Failure("Chats can only be created with friends.", HttpStatusCode.BadRequest);
+		}
+
+		bool doesChatExist = await chatRepository.DoesChatExist(createChatRequest.UserIds);
+
+		if (doesChatExist)
+			return Result.Failure("Chat with the given users already exists.", HttpStatusCode.Conflict);
+
+		return null; // Return null if no errors are found
+	}
+
 
 	public async Task<Result<GetChatsResponse[]>> GetChats(int userId)
 	{
