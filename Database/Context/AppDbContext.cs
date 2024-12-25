@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<ChatEntity> Chats { get; set; }
 	public DbSet<MessageEntity> Messages { get; set; }
 	public DbSet<MessageStatusEntity> MessagesStatus { get; set; }
+	public DbSet<PushNotificationEntity> PushNotification { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -26,5 +27,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new CountryCodesConfiguration());
 		modelBuilder.ApplyConfiguration(new ChatEntityConfiguration());
 		modelBuilder.ApplyConfiguration(new MessageStatusEntityConfiguration());
+		modelBuilder.ApplyConfiguration(new PushNotificationEntityConfiguration());
 	}
 }

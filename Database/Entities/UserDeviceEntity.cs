@@ -36,4 +36,5 @@ public class UserDeviceEntity
 	[ForeignKey(nameof(UserId))]
 	public virtual UserEntity? User { get; set; }
 	public virtual UserLoginCodeEntity? UserLoginCode { get; set; }
+	public virtual PushNotificationEntity? PushNotification { get; set; }
 }

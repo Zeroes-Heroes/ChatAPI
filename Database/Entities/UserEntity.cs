@@ -43,6 +43,7 @@ public class UserEntity
 	}
 
 	public virtual ICollection<UserDeviceEntity> UserDevices { get; set; } = [];
+	public virtual ICollection<PushNotificationEntity> PushNotification { get; set; } = [];
 	public virtual ICollection<FriendshipEntity> SentFriendships { get; set; } = [];
 	public virtual ICollection<FriendshipEntity> ReceivedFriendships { get; set; } = [];
 	public virtual ICollection<ChatEntity> Chats { get; set; } = [];
