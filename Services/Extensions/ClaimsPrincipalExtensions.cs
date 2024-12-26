@@ -11,4 +11,15 @@ public static class ClaimsPrincipalExtensions
 		   ? userId
 		   : throw new ArgumentNullException("Could not extract user id from token");
 	}
+
+	public static string DeviceId(this ClaimsPrincipal user)
+	{
+		string? deviceId = user.FindFirstValue(CustomClaimTypes.DeviceId);
+		return deviceId ?? throw new ArgumentNullException("Could not extract user Device ID from token");
+	}
+}
+
+public static class CustomClaimTypes
+{
+	public static readonly string DeviceId = "http://schemas.yourapp.com/claims/deviceid";
 }
