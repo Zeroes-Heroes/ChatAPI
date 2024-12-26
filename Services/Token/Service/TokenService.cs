@@ -27,10 +27,10 @@ public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache c
 	/// </summary>
 	/// <param name="userId"></param>
 	/// <returns></returns>
-	public async Task<TokensDTO> GenerateTokens(int userId)
+	public async Task<TokensDTO> GenerateTokens(int userId, string deviceId)
 	{
 		await RevokeTokens(userId);
-		TokensDTO tokens = GenerateNewTokens(userId, AccessTokenTTL, RefreshTokenTTL);
+		TokensDTO tokens = GenerateNewTokens(userId, deviceId, AccessTokenTTL, RefreshTokenTTL);
 		await CacheTokens(cache, userId, tokens);
 
 		return tokens;
@@ -95,12 +95,12 @@ public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache c
 	/// <summary>
 	/// General static method to cache a token.
 	/// </summary>
-	private TokensDTO GenerateNewTokens(int userId, int accessTokenTTL, int refreshTokenTTL)
+	private TokensDTO GenerateNewTokens(int userId, string deviceId, int accessTokenTTL, int refreshTokenTTL)
 	{
 		DateTime now = DateTime.UtcNow;
 
-		SecurityTokenDescriptor accessTokenDescriptor = GetTokenDescriptor(userId, now.AddMinutes(accessTokenTTL));
-		SecurityTokenDescriptor refreshTokenDescriptor = GetTokenDescriptor(userId, now.AddMinutes(refreshTokenTTL));
+		SecurityTokenDescriptor accessTokenDescriptor = GetTokenDescriptor(userId, deviceId, now.AddMinutes(accessTokenTTL));
+		SecurityTokenDescriptor refreshTokenDescriptor = GetTokenDescriptor(userId, deviceId, now.AddMinutes(refreshTokenTTL));
 
 		JsonWebTokenHandler handler = new();
 		string accessToken = handler.CreateToken(accessTokenDescriptor);
@@ -115,10 +115,10 @@ public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache c
 			accessToken,
 			DateTime.UtcNow.AddMinutes(expirationMinutes));
 
-	private SecurityTokenDescriptor GetTokenDescriptor(int userId, DateTime expiresOn) =>
+	private SecurityTokenDescriptor GetTokenDescriptor(int userId, string deviceId, DateTime expiresOn) =>
 		new()
 		{
-			Subject = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString())]),
+			Subject = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString()), new Claim(CustomClaimTypes.DeviceId, deviceId)]),
 			Expires = expiresOn,
 			Issuer = appSettings.TokenIssuer,
 			Audience = appSettings.TokenAudience,
