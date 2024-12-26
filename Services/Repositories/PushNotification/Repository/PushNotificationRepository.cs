@@ -16,15 +16,15 @@ namespace Services.Repositories.PushNotification.Repository
             return notificationEntity;
         }
 
-        public async Task<PushNotificationEntity?> UpdateDeviceData(int notificationId)
+        public async Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationStatus)
         {
-            PushNotificationEntity? notificationData = await dbContext.PushNotification.FirstOrDefaultAsync(n => n.Id == notificationId);
-            if (notificationData == null)
+            PushNotificationEntity? notificationData = await dbContext.PushNotification.FirstOrDefaultAsync(n => n.UserDevice.DeviceId == deviceId && n.UserId == userId);
+            if (notificationData == null || notificationData.IsTurnOnNotification == isNotificationStatus)
             {
                 return null;
             }
 
-            notificationData.IsTurnOnNotification = !notificationData.IsTurnOnNotification;
+            notificationData.IsTurnOnNotification = isNotificationStatus;
 
             await SaveChangesAsync();
 
@@ -34,8 +34,10 @@ namespace Services.Repositories.PushNotification.Repository
         public Task<bool> DoesDeviceTokenExist(PushNotificationDTO notificationDTO, int userId) =>
             dbContext.PushNotification.AnyAsync(p => p.Token == notificationDTO.Token && p.UserId == userId);
 
-        public Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(int deviceId, int userId) =>
-            dbContext.PushNotification.FirstOrDefaultAsync(r => r.DeviceId == deviceId && r.UserId == userId);
+        public Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(string deviceId, int userId)
+        {
+            return dbContext.PushNotification.FirstOrDefaultAsync(r => r.UserDevice.DeviceId == deviceId && r.UserId == userId);
+        }
 
         public Task SaveChangesAsync() =>
             dbContext.SaveChangesAsync();

@@ -1,3 +1,3 @@
 namespace Services.PushNotification.Models;
 
-public record PushNotificationResponseDeviceData(int Id, bool IsTurnOnNotification);
+public record PushNotificationResponseDeviceData(bool IsTurnOnNotification);

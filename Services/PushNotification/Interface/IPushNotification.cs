@@ -7,7 +7,7 @@ namespace Services.PushNotification.Interface
     public interface IPushNotification
     {
         Task<Result<PushNotificationResponse>> SubscribeForPushNotification(PushNotificationDTO subscribeForPushNotification, int userId);
-        Task<Result> UnsubscribeForPushNotification(int notificationId);
-        Task<Result<PushNotificationResponseDeviceData>> GetDeviceDataForPushNotification(string deviceData, int userId);
+        Task<Result> ChangePushNotificationStatus(int userId, string deviceId, ChangeStatusRequest request);
+        Task<Result<PushNotificationResponseDeviceData>> GetPushNotificationData(string deviceId, int userId);
     }
 }

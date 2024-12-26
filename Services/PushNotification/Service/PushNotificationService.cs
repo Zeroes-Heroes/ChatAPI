@@ -17,13 +17,13 @@ namespace Services.PushNotification.Service
                 return Result<PushNotificationResponse>.Failure("This Device token already exists");
             };
 
-            var deviceId = await userRepo.GetIdByDeviceId(deviceData.DeviceId);
-            if (deviceId == null)
+            var userDevice = await userRepo.GetIdByDeviceId(deviceData.DeviceId);
+            if (userDevice == null)
             {
                 Result<PushNotificationResponse>.Failure("Device Id doesn't exists");
             }
 
-            PushNotificationEntity notificationEntity = new(deviceData.OS, deviceData.Token, IsTurnOnNotification: true, UserId: userId, deviceId.Id);
+            PushNotificationEntity notificationEntity = new(deviceData.OS, deviceData.Token, IsTurnOnNotification: true, UserId: userId, userDevice.Id);
 
             PushNotificationEntity result = await pushNotificationRepo.AddDeviceData(notificationEntity);
 
@@ -32,32 +32,26 @@ namespace Services.PushNotification.Service
             return Result<PushNotificationResponse>.Success(notificationId);
         }
 
-        public async Task<Result> UnsubscribeForPushNotification(int notificationId)
+        public async Task<Result> ChangePushNotificationStatus(int userId, string deviceId, ChangeStatusRequest request)
         {
-            PushNotificationEntity? result = await pushNotificationRepo.UpdateDeviceData(notificationId);
+            PushNotificationEntity? result = await pushNotificationRepo.UpdateDeviceData(userId, deviceId, request.IsNotificationStatus);
             if (result == null)
             {
-                Result.Failure("No data found");
+                Result.Failure("No data found or new record is the same with old record");
             }
 
             return Result.Success();
         }
 
-        public async Task<Result<PushNotificationResponseDeviceData>> GetDeviceDataForPushNotification(string deviceData, int userId)
+        public async Task<Result<PushNotificationResponseDeviceData>> GetPushNotificationData(string deviceId, int userId)
         {
-            var result = await userRepo.GetIdByDeviceId(deviceData);
-            if (result == null)
-            {
-                return Result<PushNotificationResponseDeviceData>.Failure("Device id is not found");
-            }
-
-            PushNotificationEntity? resultPushNotification = await pushNotificationRepo.GetPushNotificationIdByDeviceId(result.Id, userId);
+            PushNotificationEntity? resultPushNotification = await pushNotificationRepo.GetPushNotificationIdByDeviceId(deviceId, userId);
             if (resultPushNotification == null)
             {
                 return Result<PushNotificationResponseDeviceData>.Failure("Push Notification Data not found");
             }
 
-            PushNotificationResponseDeviceData pushNotificationData = new(resultPushNotification.Id, resultPushNotification.IsTurnOnNotification);
+            PushNotificationResponseDeviceData pushNotificationData = new(resultPushNotification.IsTurnOnNotification);
             return Result<PushNotificationResponseDeviceData>.Success(pushNotificationData);
         }
     }

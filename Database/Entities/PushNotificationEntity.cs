@@ -36,6 +36,6 @@ namespace Database.Entities
         public virtual UserEntity? User { get; set; }
 
         [ForeignKey(nameof(DeviceId))]
-        public virtual UserDeviceEntity? UserDevice { get; set; }
+        public virtual UserDeviceEntity UserDevice { get; set; } = null!;
     }
 }

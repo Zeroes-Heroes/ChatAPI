@@ -7,8 +7,8 @@ namespace Services.Repositories.PushNotification.Interface
     public interface IPushNotificationRepository : IBaseRepository
     {
         Task<PushNotificationEntity> AddDeviceData(PushNotificationEntity notificationEntity);
-        Task<PushNotificationEntity?> UpdateDeviceData(int notificationId);
+        Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationStatus);
         Task<bool> DoesDeviceTokenExist(PushNotificationDTO notificationDTO, int userId);
-        Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(int deviceId, int userId);
+        Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(string deviceId, int userId);
     }
 }
