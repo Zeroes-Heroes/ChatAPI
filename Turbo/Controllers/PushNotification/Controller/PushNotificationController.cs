@@ -26,10 +26,10 @@ namespace Turbo.Controllers.PushNotification.Controller
         [HttpPost]
         public async Task<IActionResult> SubscribeForPushNotification([FromBody] PushNotificationDTO deviceData)
         {
-            var result = await pushNotificationService.SubscribeForPushNotification(deviceData, User.Id());
+            var result = await pushNotificationService.SubscribeForPushNotification(deviceData, User.Id(), User.DeviceId());
             if (result.IsSuccess)
             {
-                return Ok(result.Data);
+                return Ok();
             }
 
             return StatusCode(result.StatusCode, result.Error);

@@ -9,27 +9,25 @@ namespace Services.PushNotification.Service
 {
     public class PushNotificationService(IPushNotificationRepository pushNotificationRepo, IUserRepository userRepo) : IPushNotification
     {
-        public async Task<Result<PushNotificationResponse>> SubscribeForPushNotification(PushNotificationDTO deviceData, int userId)
+        public async Task<Result> SubscribeForPushNotification(PushNotificationDTO deviceData, int userId, string deviceId)
         {
             bool doesDeviceTokenExist = await pushNotificationRepo.DoesDeviceTokenExist(deviceData, userId);
             if (doesDeviceTokenExist)
             {
-                return Result<PushNotificationResponse>.Failure("This Device token already exists");
+                return Result.Failure("This Device token already exists");
             };
 
-            var userDevice = await userRepo.GetIdByDeviceId(deviceData.DeviceId);
+            var userDevice = await userRepo.GetIdByDeviceId(deviceId);
             if (userDevice == null)
             {
-                Result<PushNotificationResponse>.Failure("Device Id doesn't exists");
+                return Result.Failure("Device Id doesn't exists");
             }
 
             PushNotificationEntity notificationEntity = new(deviceData.OS, deviceData.Token, IsTurnOnNotification: true, UserId: userId, userDevice.Id);
 
             PushNotificationEntity result = await pushNotificationRepo.AddDeviceData(notificationEntity);
 
-            PushNotificationResponse notificationId = new(result.Id);
-
-            return Result<PushNotificationResponse>.Success(notificationId);
+            return Result.Success();
         }
 
         public async Task<Result> ChangePushNotificationStatus(int userId, string deviceId, ChangeStatusRequest request)
@@ -37,7 +35,7 @@ namespace Services.PushNotification.Service
             PushNotificationEntity? result = await pushNotificationRepo.UpdateDeviceData(userId, deviceId, request.IsNotificationStatus);
             if (result == null)
             {
-                Result.Failure("No data found or new record is the same with old record");
+                return Result.Failure("No data found or new record is the same with old record");
             }
 
             return Result.Success();
