@@ -1,4 +1,6 @@
 ﻿using Database.Context;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -181,5 +183,15 @@ public static class ServiceCollectionExtension
 	{
 		TwilioClient.Init(configuration["TwillioAccountSid"], configuration["TwillioAuthToken"]);
 		return service;
+	}
+
+	public static IServiceCollection InitializeFirebase(this IServiceCollection services, IConfiguration configuration)
+	{
+		string AndroidPrivateKeyPath = configuration["AndroidPrivateKeyPath"];
+		FirebaseApp.Create(new AppOptions()
+		{
+			Credential = GoogleCredential.FromFile(AndroidPrivateKeyPath)
+		});
+		return services;
 	}
 }
