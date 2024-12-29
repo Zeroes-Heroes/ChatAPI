@@ -11,6 +11,8 @@ services:
     build:
       context: .
       dockerfile: ./Turbo/Dockerfile
+    volumes:
+      - ./chatappclient-93ff4-firebase-adminsdk-k2t2q-0f5d59c785.json:/app/chatappclient-93ff4-firebase-adminsdk-k2t2q-0f5d59c785.json
     deploy:
       resources:
         limits:

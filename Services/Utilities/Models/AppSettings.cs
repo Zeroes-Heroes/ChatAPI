@@ -9,4 +9,5 @@ public class AppSettings
 	public string TwillioAuthToken { get; set; }
 	public string TwillioAccountSid { get; set; }
 	public string TwillioVerificationSid { get; set; }
+	public string AndroidPrivateKeyPath { get; set; }
 }

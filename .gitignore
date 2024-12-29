@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 .env
 /ChatAPI.WebAPI/appsettings.json
+
+# PushNotification certificate (credentials)
+chatappclient-*
