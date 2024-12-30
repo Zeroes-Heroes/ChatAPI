@@ -158,6 +158,12 @@ public static class ServiceCollectionExtension
 	public static IServiceCollection AddServices(this IServiceCollection services) =>
 		services
 			.AddTransient<ITokenService, TokenService>()
+			.AddHttpClient("ApplePushNotificationClient", client =>
+			{
+				client.BaseAddress = new Uri("https://api.example.com/");
+			})
+			.Services
+			.AddTransient<IApplePushNotificationService, ApplePushNotificationService>()
 			.AddScoped<IUserRepository, UserRepository>()
 			.AddScoped<IFriendshipRepository, FriendshipRepository>()
 			.AddScoped<IUserService, UserService>()
