@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Services.PushNotification.Interface;
 using Services.Token.Interface;
@@ -7,13 +8,13 @@ using Services.Utilities.Models;
 
 namespace Services.PushNotification.Service
 {
-    public class ApplePushNotificationService(HttpClient httpClient, ITokenService tokenService, IOptions<AppSettings> appSettings) : IApplePushNotificationService
+    public class ApplePushNotificationService(HttpClient httpClient, IAppleTokenService appleTokenService, IOptions<AppSettings> appSettings, IDistributedCache cache) : IApplePushNotificationService
     {
         private readonly AppSettings appSettings = appSettings.Value;
 
         public async Task<Result> SendAsyncPushNotification(string deviceToken, object payload) // TODO replace "object" with "interface"
         {
-            string token = await tokenService.GenerateApplePushNotificationToken();
+            string token = await appleTokenService.GeneratePushNotificationToken();
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("bearer", token);
 
             string bundleId = appSettings.AppleBundleId;
