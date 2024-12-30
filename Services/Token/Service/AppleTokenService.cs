@@ -15,7 +15,7 @@ namespace Services.Token.Service
     {
         private readonly AppSettings appSettings = appSettings.Value;
 
-        public Task<string> GeneratePushNotificationToken()
+        private Task<string> GeneratePushNotificationToken()
         {
             string privateKeyText = File.ReadAllText(appSettings.ApplePrivateKeyPath, Encoding.UTF8);
 

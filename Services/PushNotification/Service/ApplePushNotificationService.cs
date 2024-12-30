@@ -14,7 +14,7 @@ namespace Services.PushNotification.Service
 
         public async Task<Result> SendAsyncPushNotification(string deviceToken, object payload) // TODO replace "object" with "interface"
         {
-            string token = await appleTokenService.GeneratePushNotificationToken();
+            string token = await appleTokenService.GetPushNotificationToken();
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("bearer", token);
 
             string bundleId = appSettings.AppleBundleId;
