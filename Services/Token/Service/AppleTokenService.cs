@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Services.Extensions;
 using Services.Token.Interface;
 using Services.Utilities.Models;
+using Services.Utilities.Statics;
 
 namespace Services.Token.Service
 {
@@ -59,9 +60,7 @@ namespace Services.Token.Service
 
         public async Task<string> GetPushNotificationToken()
         {
-            string cacheKey = "ApplePushNotificationToken";
-
-            string? tokenExistsInCacheWithQuotes = await cache.GetStringAsync(string.Format(cacheKey));
+            string? tokenExistsInCacheWithQuotes = await cache.GetStringAsync(string.Format(CacheKeys.ApplePushNotificationToken));
 
             if (tokenExistsInCacheWithQuotes != null)
             {
@@ -71,7 +70,7 @@ namespace Services.Token.Service
             string token = await GeneratePushNotificationToken();
 
             await cache.SetAsync(
-                string.Format(cacheKey),
+                string.Format(CacheKeys.ApplePushNotificationToken),
                 token,
                 DateTime.UtcNow.AddMinutes(20));
 
