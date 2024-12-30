@@ -10,6 +10,9 @@ using Services.Utilities.Statics;
 using System.Security.Claims;
 using System.Text;
 using Services.Extensions;
+using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text.Json;
 
 namespace Services.Token.Service;
 
@@ -51,6 +54,41 @@ public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache c
 
 	public Task<bool> ValidateRefreshToken(string refreshToken) =>
 		ValidateToken(refreshToken, TokenType.RefreshToken);
+
+	public Task<string> GenerateApplePushNotificationToken()
+	{
+		string privateKeyText = File.ReadAllText(appSettings.ApplePrivateKeyPath, Encoding.UTF8);
+
+		using var ecdsa = GetEcdsaParametersFromPrivateKey(privateKeyText);
+
+		long iat = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
+
+		var header = new JwtHeader
+		{
+			{ "alg", SecurityAlgorithms.EcdsaSha256 },
+			{ "kid", appSettings.AppleKeyId},
+		};
+
+		var payload = new JwtPayload
+		{
+			{ "iat", iat },
+			{ "iss", appSettings.AppleTeamId },
+		};
+
+		string headerJson = JsonSerializer.Serialize(header);
+		string payloadJson = JsonSerializer.Serialize(payload);
+
+		string encodeHeader = Base64UrlEncoder.Encode(headerJson);
+		string encodePayload = Base64UrlEncoder.Encode(payloadJson);
+
+		string usingToken = $"{encodeHeader}.{encodePayload}";
+
+		var signature = ecdsa.SignData(Encoding.UTF8.GetBytes(usingToken), HashAlgorithmName.SHA256);
+		string encodedSignature = Base64UrlEncoder.Encode(signature);
+
+		string tokenString = $"{usingToken}.{encodedSignature}";
+		return Task.FromResult(tokenString);
+	}
 
 	private static async Task CacheTokens(IDistributedCache cache, int userId, TokensDTO tokens)
 	{
@@ -128,4 +166,11 @@ public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache c
 	private SigningCredentials GetSigningCredentials() =>
 		new(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(appSettings.TokenSigningKey)),
 			SecurityAlgorithms.HmacSha512Signature);
+
+	private static ECDsa GetEcdsaParametersFromPrivateKey(string privateKeyContent)
+	{
+		var ecdsa = ECDsa.Create();
+		ecdsa.ImportFromPem(privateKeyContent.ToCharArray());
+		return ecdsa;
+	}
 }

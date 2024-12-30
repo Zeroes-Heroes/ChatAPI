@@ -8,4 +8,5 @@ public interface ITokenService
 	Task RevokeTokens(int userId);
 	Task<bool> ValidateAccessToken(string accessToken);
 	Task<bool> ValidateRefreshToken(string refreshToken);
+	Task<string> GenerateApplePushNotificationToken();
 }
