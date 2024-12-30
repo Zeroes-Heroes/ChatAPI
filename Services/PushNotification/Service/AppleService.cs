@@ -1,5 +1,4 @@
 using System.Text;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 using Services.PushNotification.Interface;
 using Services.Token.Interface;
@@ -8,7 +7,7 @@ using Services.Utilities.Models;
 
 namespace Services.PushNotification.Service
 {
-    public class ApplePushNotificationService(HttpClient httpClient, IAppleTokenService appleTokenService, IOptions<AppSettings> appSettings, IDistributedCache cache) : IApplePushNotificationService
+    public class AppleService(HttpClient httpClient, IAppleTokenService appleTokenService, IOptions<AppSettings> appSettings) : IAppleService
     {
         private readonly AppSettings appSettings = appSettings.Value;
 

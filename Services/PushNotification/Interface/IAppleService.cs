@@ -2,7 +2,7 @@ using Services.Utilities;
 
 namespace Services.PushNotification.Interface
 {
-    public interface IApplePushNotificationService
+    public interface IAppleService
     {
         Task<Result> SendAsyncPushNotification(string deviceToken, object payload);
     }

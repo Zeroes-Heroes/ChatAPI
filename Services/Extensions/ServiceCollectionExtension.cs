@@ -164,7 +164,7 @@ public static class ServiceCollectionExtension
 				client.BaseAddress = new Uri("https://api.example.com/");
 			})
 			.Services
-			.AddTransient<IApplePushNotificationService, ApplePushNotificationService>()
+			.AddTransient<IAppleService, AppleService>()
 			.AddScoped<IUserRepository, UserRepository>()
 			.AddScoped<IFriendshipRepository, FriendshipRepository>()
 			.AddScoped<IUserService, UserService>()
