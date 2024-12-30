@@ -1,3 +1,9 @@
 namespace Services.PushNotification.Models;
 
-public record PushNotificationBody(string Title, string Body, string Route, int? ChatId);
+public class PushNotificationBody
+{
+    public string Title { get; set; }
+    public string Body { get; set; }
+    public string Route { get; set; }
+    public int? ChatId { get; set; }
+};
