@@ -20,6 +20,8 @@ using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.Friendship.Repository;
+using Services.Repositories.OperationSystem.Interface;
+using Services.Repositories.OperationSystem.Repository;
 using Services.Repositories.PushNotification.Interface;
 using Services.Repositories.PushNotification.Repository;
 using Services.Repositories.Resources.Interface;
@@ -164,8 +166,9 @@ public static class ServiceCollectionExtension
 			.AddScoped<IResourceRepository, ResourceRepository>()
 			.AddScoped<IChatService, ChatService>()
 			.AddScoped<IChatRepository, ChatRepository>()
-			.AddScoped<IPushNotificationRepository, PushNotificationRepository>()
 			.AddScoped<IPushNotification, PushNotificationService>()
+			.AddScoped<IPushNotificationRepository, PushNotificationRepository>()
+			.AddScoped<IOperationSystemRepository, OperationSystemRepository>()
 			.AddSignalR()
 				 .AddMessagePackProtocol(options =>
 				 {

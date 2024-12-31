@@ -5,7 +5,7 @@ namespace Database.Entities
 {
     public class PushNotificationEntity
     {
-        public PushNotificationEntity(string oS, string token, bool IsTurnOnNotification, int UserId, int deviceId)
+        public PushNotificationEntity(int oS, string token, bool IsTurnOnNotification, int UserId, int deviceId)
         {
             OS = oS;
             Token = token;
@@ -24,7 +24,7 @@ namespace Database.Entities
         public int DeviceId { get; set; }
 
         [Required]
-        public string OS { get; set; }
+        public int OS { get; set; }
 
         [Required]
         public string Token { get; set; }
@@ -36,5 +36,8 @@ namespace Database.Entities
 
         [ForeignKey(nameof(DeviceId))]
         public virtual UserDeviceEntity UserDevice { get; set; } = null!;
+        
+        [ForeignKey(nameof(OS))]
+        public virtual OperationSystemEntity OperationSystem { get; set; } = null!;
     }
 }
