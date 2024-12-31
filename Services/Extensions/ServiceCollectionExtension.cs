@@ -194,11 +194,19 @@ public static class ServiceCollectionExtension
 
 	public static IServiceCollection InitializeFirebase(this IServiceCollection services, IConfiguration configuration)
 	{
-		string AndroidPrivateKeyPath = configuration["AndroidPrivateKeyPath"];
-		FirebaseApp.Create(new AppOptions()
+		// TODO: Review the try {} catch block to either improve its error handling logic or remove it if unnecessary
+		try
 		{
-			Credential = GoogleCredential.FromFile(AndroidPrivateKeyPath)
-		});
+			string AndroidPrivateKeyPath = configuration["AndroidPrivateKeyPath"];
+			FirebaseApp.Create(new AppOptions()
+			{
+				Credential = GoogleCredential.FromFile(AndroidPrivateKeyPath)
+			});
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Firebase initialization error: {ex.Message}");
+		}
 		return services;
 	}
 }
