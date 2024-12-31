@@ -2,13 +2,14 @@ using Database.Entities;
 using FirebaseAdmin.Messaging;
 using Services.PushNotification.Interface;
 using Services.PushNotification.Models;
+using Services.Repositories.OperationSystem.Interface;
 using Services.Repositories.PushNotification.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities;
 
 namespace Services.PushNotification.Service
 {
-    public class PushNotificationService(IPushNotificationRepository pushNotificationRepo, IUserRepository userRepo, IAppleService appleService) : IPushNotification
+    public class PushNotificationService(IPushNotificationRepository pushNotificationRepo, IUserRepository userRepo, IAppleService appleService, IOperationSystemRepository operationSystemRepo) : IPushNotification
     {
         public async Task<Result> SubscribeForPushNotification(PushNotificationDTO deviceData, int userId, string deviceId)
         {
@@ -24,9 +25,15 @@ namespace Services.PushNotification.Service
                 return Result.Failure("Device Id doesn't exists");
             }
 
-            PushNotificationEntity notificationEntity = new(deviceData.OS, deviceData.Token, IsTurnOnNotification: true, UserId: userId, userDevice.Id);
+            var operationSystemId = await operationSystemRepo.GetOperationSystemId(deviceData.OS);
+            if (operationSystemId == null)
+            {
+                return Result.Failure($"This operating system {deviceData.OS} is not maintained");
+            }
 
-            PushNotificationEntity result = await pushNotificationRepo.AddDeviceData(notificationEntity);
+            PushNotificationEntity notificationEntity = new(operationSystemId.Value, deviceData.Token, IsTurnOnNotification: true, UserId: userId, userDevice.Id);
+
+            await pushNotificationRepo.AddDeviceData(notificationEntity);
 
             return Result.Success();
         }
