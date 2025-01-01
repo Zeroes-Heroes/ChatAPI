@@ -10,5 +10,6 @@ namespace Services.Repositories.PushNotification.Interface
         Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationStatus);
         Task<bool> DoesDeviceTokenExist(PushNotificationDTO notificationDTO, int userId);
         Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(string deviceId, int userId);
+        Task<List<DeviceDataResponse>> FetchEnabledUserDeviceDataById (int userId);
     }
 }

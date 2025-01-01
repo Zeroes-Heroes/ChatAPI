@@ -39,6 +39,17 @@ namespace Services.Repositories.PushNotification.Repository
             return dbContext.PushNotification.FirstOrDefaultAsync(r => r.UserDevice.DeviceId == deviceId && r.UserId == userId);
         }
 
+        public async Task<List<DeviceDataResponse>> FetchEnabledUserDeviceDataById(int userId)
+        {
+            return await dbContext.PushNotification.Where(r => r.UserId == userId && r.IsTurnOnNotification == true)
+                .Select(pushNotification => new DeviceDataResponse
+                {
+                    OS = pushNotification.OS,
+                    Token = pushNotification.Token,
+                    IsTurnOnNotification = pushNotification.IsTurnOnNotification,
+                }).ToListAsync();
+        }
+
         public Task SaveChangesAsync() =>
             dbContext.SaveChangesAsync();
     }
