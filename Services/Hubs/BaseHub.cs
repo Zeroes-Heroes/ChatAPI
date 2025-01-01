@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
 using Services.Hubs.Models;
+using Services.PushNotification.Service;
 using Services.Utilities.Statics;
 using System.Security.Claims;
 
@@ -34,12 +35,12 @@ Other things to note:
 	with the connection as the user identifier.
 
 	- By default, hub method parameters are inspected and resolved from DI if possible.
-	This means you can directly use dependancy injection in the methods themselves.
+	This means you can directly use dependency injection in the methods themselves.
 	Or you can use DI the old-fashioned way, with a constructor.
 
 	- You can change the name of the action/method using the [HubMethodName] attribute.
 
-	- You can ovverride the OnConnectAsync() and OnDisconnectAsync() methods.
+	- You can override the OnConnectAsync() and OnDisconnectAsync() methods.
 */
 
 [Authorize]
@@ -135,6 +136,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
+		PushNotificationService pushNotification = serviceProvider.GetRequiredService<PushNotificationService>();
 
 		ClaimsPrincipal? user = Context.User;
 
@@ -186,6 +188,9 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			}
 			else
 				continue;
+
+			// Send a notification to each user participating in the chat, excluding the user who sender the message
+			pushNotification.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
 
 			await Clients
 				.GetUserById(senderId)
