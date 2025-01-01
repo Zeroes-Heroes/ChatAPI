@@ -140,17 +140,19 @@ namespace Services.PushNotification.Service
             return userEntity?.Name ?? "";
         }
 
-        public async Task<Result> NotificationForNewMessage(int userId, string name, string message, int chatId)
+        public async Task<Result> NotificationForNewMessage(int receiverId, int senderUserId, string message, int chatId)
         {
+            string userName = await GetUserNameById(senderUserId);
+
             PushNotificationBody notificationBody = new PushNotificationBody()
             {
-                Title = $"{name} send you a message",
+                Title = $"{userName} send you a message",
                 Body = message,
                 Route = "Chats",
                 ChatId = chatId,
             };
 
-            await SendNotification(userId, notificationBody);
+            await SendNotification(receiverId, notificationBody);
 
             return Result.Success();
         }

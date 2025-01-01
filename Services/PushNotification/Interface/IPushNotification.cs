@@ -8,7 +8,7 @@ namespace Services.PushNotification.Interface
         Task<Result> SubscribeForPushNotification(PushNotificationDTO subscribeForPushNotification, int userId, string deviceId);
         Task<Result> ChangePushNotificationStatus(int userId, string deviceId, ChangeStatusRequest request);
         Task<Result<PushNotificationResponseDeviceData>> GetPushNotificationData(string deviceId, int userId);
-        Task<Result> NotificationForNewMessage(int userId, string name, string message, int chatId);
+        Task<Result> NotificationForNewMessage(int receiverId, int senderUserId, string message, int chatId);
         Task<Result> NotificationForNewCreateChat(int[] chatParticipantIds, int chatCreatorId, int chatId);
         Task<Result> NotificationForNewFriendshipRequest(int receiverUserId, string name);
         Task<Result> NotificationForAcceptFriendship(int notificationRecipientId, int requestSenderId);
