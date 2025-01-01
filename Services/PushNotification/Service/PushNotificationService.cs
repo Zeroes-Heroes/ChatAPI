@@ -140,7 +140,7 @@ namespace Services.PushNotification.Service
             return userEntity?.Name ?? "";
         }
 
-        public async Task<Result> NotificationForNewMessage(int receiverId, int senderUserId, string message, int chatId)
+        public async Task<Result> NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
         {
             string userName = await GetUserNameById(senderUserId);
 
@@ -152,7 +152,13 @@ namespace Services.PushNotification.Service
                 ChatId = chatId,
             };
 
-            await SendNotification(receiverId, notificationBody);
+            for (int i = 0; i < receiversIds.Count(); i++)
+            {
+                if (i != senderUserId)
+                {
+                    await SendNotification(i, notificationBody);
+                }
+            }
 
             return Result.Success();
         }
