@@ -1,4 +1,5 @@
 using Database.Entities;
+using Database.Enums;
 using FirebaseAdmin.Messaging;
 using Services.PushNotification.Interface;
 using Services.PushNotification.Models;
@@ -109,6 +110,28 @@ namespace Services.PushNotification.Service
             await FirebaseMessaging.DefaultInstance.SendAsync(message);
 
             return Result.Success();
+        }
+
+        //  IMPORTANT: There is a possibility that, with the change in the ability to manage which notifications
+        //  to receive and which not, the method may start receiving an array of data for each device to which it
+        //  should send a notification as the first parameter.
+        private async Task SendNotification(int userId, PushNotificationBody notificationBody)
+        {
+            List<DeviceDataResponse> result = await pushNotificationRepo.FetchEnabledUserDeviceDataById(userId);
+
+            foreach (var deviceData in result)
+            {
+                string deviceToken = deviceData.Token;
+                if (deviceData.OS == (int)DeviceOperationSystemType.Ios)
+                {
+                    await SendPushNotificationToApple(deviceToken, notificationBody);
+                }
+
+                if (deviceData.OS == (int)DeviceOperationSystemType.Android)
+                {
+                    await SendPushNotificationToAndroid(deviceToken, notificationBody);
+                }
+            }
         }
     }
 }
