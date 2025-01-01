@@ -177,29 +177,57 @@ namespace Services.PushNotification.Service
 
             return Result.Success();
         }
-        public async Task<Result> NotificationForAcceptFriendship(int userId, string name)
+
+        private async Task<string> GetUserNameById(int userId)
         {
+            UserEntity? userEntity = await userRepo.GetUser(userId);
+            return userEntity?.Name ?? "";
+        }
+
+        public async Task<Result> NotificationForAcceptFriendship(int notificationRecipientId, int requestSenderId)
+        {
+            string userName = await GetUserNameById(requestSenderId);
+
             PushNotificationBody notificationBody = new PushNotificationBody()
             {
                 Title = "Accepted request",
-                Body = $"{name} accepted your friend request",
+                Body = $"{userName} accepted your friend request",
                 Route = "Contacts",
             };
 
-            await SendNotification(userId, notificationBody);
+            await SendNotification(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
-        public async Task<Result> NotificationForRejectedFriendship(int userId, string name)
+
+        public async Task<Result> NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
         {
+            string userName = await GetUserNameById(requestSenderId);
+
             PushNotificationBody notificationBody = new PushNotificationBody()
             {
                 Title = "Rejected request",
-                Body = $"{name} reject your friend request",
+                Body = $"{userName} reject your friend request",
                 Route = "RejectedRequests",
             };
 
-            await SendNotification(userId, notificationBody);
+            await SendNotification(notificationRecipientId, notificationBody);
+
+            return Result.Success();
+        }
+
+        public async Task<Result> NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
+        {
+            string userName = await GetUserNameById(requestSenderId);
+
+            PushNotificationBody notificationBody = new PushNotificationBody()
+            {
+                Title = "Blocker request",
+                Body = $"{userName} block your friend request",
+                Route = "BlockedContacts",
+            };
+
+            await SendNotification(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }

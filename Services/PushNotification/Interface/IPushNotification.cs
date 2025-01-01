@@ -10,8 +10,9 @@ namespace Services.PushNotification.Interface
         Task<Result<PushNotificationResponseDeviceData>> GetPushNotificationData(string deviceId, int userId);
         Task<Result> NotificationForNewMessage(int userId, string name, string message, int chatId);
         Task<Result> NotificationForNewCreateChat(int userId, string name, int chatId);
-        Task<Result> NotificationForNewFriendshipRequest(int userId, string name);
-        Task<Result> NotificationForAcceptFriendship(int userId, string name);
-        Task<Result> NotificationForRejectedFriendship(int userId, string name);
+        Task<Result> NotificationForNewFriendshipRequest(int receiverUserId, string name);
+        Task<Result> NotificationForAcceptFriendship(int notificationRecipientId, int requestSenderId);
+        Task<Result> NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId);
+        Task<Result> NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId);
     }
 }
