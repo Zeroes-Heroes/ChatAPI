@@ -134,6 +134,12 @@ namespace Services.PushNotification.Service
             }
         }
 
+        private async Task<string> GetUserNameById(int userId)
+        {
+            UserEntity? userEntity = await userRepo.GetUser(userId);
+            return userEntity?.Name ?? "";
+        }
+
         public async Task<Result> NotificationForNewMessage(int userId, string name, string message, int chatId)
         {
             PushNotificationBody notificationBody = new PushNotificationBody()
@@ -149,17 +155,25 @@ namespace Services.PushNotification.Service
             return Result.Success();
         }
 
-        public async Task<Result> NotificationForNewCreateChat(int userId, string name, int chatId)
+        public async Task<Result> NotificationForNewCreateChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
         {
+            string userName = await GetUserNameById(chatCreatorId);
+
             PushNotificationBody notificationBody = new PushNotificationBody()
             {
                 Title = "New Created chat",
-                Body = $"{name} created chat with you",
+                Body = $"{userName} created chat with you",
                 Route = "Chats",
                 ChatId = chatId,
             };
 
-            await SendNotification(userId, notificationBody);
+            for (int i = 0; i < chatParticipantIds.Count(); i++)
+            {
+                if (i != chatCreatorId)
+                {
+                    await SendNotification(i, notificationBody);
+                }
+            }
 
             return Result.Success();
         }
@@ -176,12 +190,6 @@ namespace Services.PushNotification.Service
             await SendNotification(userId, notificationBody);
 
             return Result.Success();
-        }
-
-        private async Task<string> GetUserNameById(int userId)
-        {
-            UserEntity? userEntity = await userRepo.GetUser(userId);
-            return userEntity?.Name ?? "";
         }
 
         public async Task<Result> NotificationForAcceptFriendship(int notificationRecipientId, int requestSenderId)
