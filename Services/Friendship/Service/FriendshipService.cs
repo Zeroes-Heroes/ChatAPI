@@ -5,6 +5,7 @@ using Services.Friendship.Interface;
 using Services.Friendship.Models;
 using Services.Hubs;
 using Services.Hubs.Models;
+using Services.PushNotification.Interface;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities;
@@ -13,7 +14,7 @@ using static Services.Utilities.Statics.LiveEvents;
 
 namespace Services.Friendship.Service;
 
-public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext) : IFriendshipService
+public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext, IPushNotification pushNotification) : IFriendshipService
 {
 	private readonly IHubContext<BaseHub> hubContext = hubContext;
 
@@ -52,6 +53,8 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 				NewFriendRequest,
 				new FriendshipDTO(senderUserId, senderUser.Name, senderUser.Phone, (int)FriendshipStatus.Pending, IsInitiator: false));
 
+		pushNotification.NotificationForNewFriendshipRequest(targetUser.Id, senderUser.Name);
+
 		return Result<FriendshipDTO>.Success(
 			new FriendshipDTO(targetUser.Id, targetUser.Name, targetUser.Phone, (int)FriendshipStatus.Pending, IsInitiator: true));
 	}
@@ -89,6 +92,19 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 
 		friendship.Status = newStatus;
 		await friendRepo.SaveChangesAsync();
+
+		switch (newStatus)
+		{
+			case FriendshipStatus.Accepted:
+				pushNotification.NotificationForAcceptFriendship(senderUserId, targetUserId);
+				break;
+			case FriendshipStatus.Rejected:
+				pushNotification.NotificationForRejectedFriendship(senderUserId, targetUserId);
+				break;
+			case FriendshipStatus.Blocked:
+				pushNotification.NotificationForBlockedFriendship(senderUserId, targetUserId);
+				break;
+		}
 
 		await hubContext.Clients.GetUserById(senderUserId).SendAsync(FriendRequestAnswer, new FriendRequestModelAnswerModel(targetUserId, (int)newStatus));
 
