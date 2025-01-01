@@ -133,5 +133,75 @@ namespace Services.PushNotification.Service
                 }
             }
         }
+
+        public async Task<Result> NotificationForNewMessage(int userId, string name, string message, int chatId)
+        {
+            PushNotificationBody notificationBody = new PushNotificationBody()
+            {
+                Title = $"{name} send you a message",
+                Body = message,
+                Route = "Chats",
+                ChatId = chatId,
+            };
+
+            await SendNotification(userId, notificationBody);
+
+            return Result.Success();
+        }
+
+        public async Task<Result> NotificationForNewCreateChat(int userId, string name, int chatId)
+        {
+            PushNotificationBody notificationBody = new PushNotificationBody()
+            {
+                Title = "New Created chat",
+                Body = $"{name} created chat with you",
+                Route = "Chats",
+                ChatId = chatId,
+            };
+
+            await SendNotification(userId, notificationBody);
+
+            return Result.Success();
+        }
+
+        public async Task<Result> NotificationForNewFriendshipRequest(int userId, string name)
+        {
+            PushNotificationBody notificationBody = new PushNotificationBody()
+            {
+                Title = "New Request",
+                Body = $"{name} you send new friendship request",
+                Route = "Requests",
+            };
+
+            await SendNotification(userId, notificationBody);
+
+            return Result.Success();
+        }
+        public async Task<Result> NotificationForAcceptFriendship(int userId, string name)
+        {
+            PushNotificationBody notificationBody = new PushNotificationBody()
+            {
+                Title = "Accepted request",
+                Body = $"{name} accepted your friend request",
+                Route = "Contacts",
+            };
+
+            await SendNotification(userId, notificationBody);
+
+            return Result.Success();
+        }
+        public async Task<Result> NotificationForRejectedFriendship(int userId, string name)
+        {
+            PushNotificationBody notificationBody = new PushNotificationBody()
+            {
+                Title = "Rejected request",
+                Body = $"{name} reject your friend request",
+                Route = "RejectedRequests",
+            };
+
+            await SendNotification(userId, notificationBody);
+
+            return Result.Success();
+        }
     }
 }
