@@ -17,9 +17,7 @@ namespace Services.Repositories.OperationSystem.Repository
             return null;
         }
 
-        public Task SaveChangesAsync()
-        {
-            throw new NotImplementedException();
-        }
+        public Task SaveChangesAsync() =>
+            dbContext.SaveChangesAsync();
     }
 }

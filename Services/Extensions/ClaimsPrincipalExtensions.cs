@@ -15,7 +15,7 @@ public static class ClaimsPrincipalExtensions
 	public static string DeviceId(this ClaimsPrincipal user)
 	{
 		string? deviceId = user.FindFirstValue(CustomClaimTypes.DeviceId);
-		return deviceId ?? throw new ArgumentNullException("Could not extract user Device ID from token");
+		return deviceId ?? throw new ArgumentNullException("Could not extract device id from token");
 	}
 }
 

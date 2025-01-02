@@ -16,22 +16,22 @@ namespace Services.Repositories.PushNotification.Repository
             return notificationEntity;
         }
 
-        public async Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationStatus)
+        public async Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled)
         {
             PushNotificationEntity? notificationData = await dbContext.PushNotification.FirstOrDefaultAsync(n => n.UserDevice.DeviceId == deviceId && n.UserId == userId);
-            if (notificationData == null || notificationData.IsTurnOnNotification == isNotificationStatus)
+            if (notificationData == null || notificationData.IsTurnOnNotification == isNotificationEnabled)
             {
                 return null;
             }
 
-            notificationData.IsTurnOnNotification = isNotificationStatus;
+            notificationData.IsTurnOnNotification = isNotificationEnabled;
 
             await SaveChangesAsync();
 
             return notificationData;
         }
 
-        public Task<bool> DoesDeviceTokenExist(PushNotificationDTO notificationDTO, int userId) =>
+        public Task<bool> CheckDeviceTokenExists(PushNotificationDTO notificationDTO, int userId) =>
             dbContext.PushNotification.AnyAsync(p => p.Token == notificationDTO.Token && p.UserId == userId);
 
         public Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(string deviceId, int userId)

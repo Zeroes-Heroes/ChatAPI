@@ -12,13 +12,13 @@ namespace Services.PushNotification.Service
     {
         public async Task<Result> SubscribeForPushNotification(PushNotificationDTO deviceData, int userId, string deviceId)
         {
-            bool doesDeviceTokenExist = await pushNotificationRepo.DoesDeviceTokenExist(deviceData, userId);
-            if (doesDeviceTokenExist)
+            bool checkDeviceTokenExists = await pushNotificationRepo.CheckDeviceTokenExists(deviceData, userId);
+            if (checkDeviceTokenExists)
             {
                 return Result.Failure("This Device token already exists");
             };
 
-            var userDevice = await userRepo.GetIdByDeviceId(deviceId);
+            var userDevice = await userRepo.GetDeviceByDeviceId(deviceId);
             if (userDevice == null)
             {
                 return Result.Failure("Device Id doesn't exists");
@@ -39,7 +39,7 @@ namespace Services.PushNotification.Service
 
         public async Task<Result> ChangePushNotificationStatus(int userId, string deviceId, ChangeStatusRequest request)
         {
-            PushNotificationEntity? result = await pushNotificationRepo.UpdateDeviceData(userId, deviceId, request.IsNotificationStatus);
+            PushNotificationEntity? result = await pushNotificationRepo.UpdateDeviceData(userId, deviceId, request.IsNotificationEnabled);
             if (result == null)
             {
                 return Result.Failure("No data found or new record is the same with old record");

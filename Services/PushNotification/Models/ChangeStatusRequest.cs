@@ -1,3 +1,3 @@
 namespace Services.PushNotification.Models;
 
-public record ChangeStatusRequest(bool IsNotificationStatus);
+public record ChangeStatusRequest(bool IsNotificationEnabled);
