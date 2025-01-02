@@ -30,7 +30,7 @@ namespace Services.PushNotification.Service
                 return Result.Failure($"This operating system {deviceData.OS} is not maintained");
             }
 
-            PushNotificationEntity notificationEntity = new(operationSystemId.Value, deviceData.Token, IsTurnOnNotification: true, UserId: userId, userDevice.Id);
+            PushNotificationEntity notificationEntity = new(operationSystemId.Value, deviceData.Token, IsNotificationEnabled: true, UserId: userId, userDevice.Id);
 
             await pushNotificationRepo.AddDeviceData(notificationEntity);
 
@@ -56,7 +56,7 @@ namespace Services.PushNotification.Service
                 return Result<PushNotificationResponseDeviceData>.Failure("Push Notification Data not found");
             }
 
-            PushNotificationResponseDeviceData pushNotificationData = new(resultPushNotification.IsTurnOnNotification);
+            PushNotificationResponseDeviceData pushNotificationData = new(resultPushNotification.IsNotificationEnabled);
             return Result<PushNotificationResponseDeviceData>.Success(pushNotificationData);
         }
     }

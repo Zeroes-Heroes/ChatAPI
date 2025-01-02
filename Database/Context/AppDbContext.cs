@@ -16,8 +16,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<ChatEntity> Chats { get; set; }
 	public DbSet<MessageEntity> Messages { get; set; }
 	public DbSet<MessageStatusEntity> MessagesStatus { get; set; }
-	public DbSet<PushNotificationEntity> PushNotification { get; set; }
-	public DbSet<OperationSystemEntity> OperationSystem { get; set; }
+	public DbSet<PushNotificationEntity> PushNotifications { get; set; }
+	public DbSet<OperationSystemEntity> OperationSystems { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{

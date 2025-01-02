@@ -4,6 +4,11 @@ namespace Database.Entities
 {
     public class OperationSystemEntity
     {
+        public OperationSystemEntity(string typeOS)
+        {
+            TypeOS = typeOS;
+        }
+
         [Key]
         public int Id { get; set; }
 
@@ -11,6 +16,6 @@ namespace Database.Entities
         public string TypeOS { get; set; }
 
         [Required]
-        public virtual ICollection<PushNotificationEntity> PushNotification { get; set; } = [];
+        public virtual ICollection<PushNotificationEntity> PushNotifications { get; set; } = [];
     }
 }

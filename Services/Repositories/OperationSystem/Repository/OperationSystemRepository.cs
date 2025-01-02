@@ -9,7 +9,7 @@ namespace Services.Repositories.OperationSystem.Repository
     {
         public async Task<int?> GetOperationSystemId(string operationSystem)
         {
-            OperationSystemEntity result = await dbContext.OperationSystem.FirstOrDefaultAsync(o => o.TypeOS == operationSystem);
+            OperationSystemEntity result = await dbContext.OperationSystems.FirstOrDefaultAsync(o => o.TypeOS == operationSystem);
             if (result != null)
             {
                 return result.Id;

@@ -1,7 +1,6 @@
 using Database.Context;
 using Database.Entities;
 using Database.Seeders.Interfaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace Database.Seeders
 {
@@ -9,15 +8,15 @@ namespace Database.Seeders
     {
         public void Seed(AppDbContext context)
         {
-            if (!context.OperationSystem.Any())
+            if (!context.OperationSystems.Any())
             {
-                var entity = new List<OperationSystemEntity>
-                {
-                    new() { TypeOS = "ios" },
-                    new() { TypeOS = "android" },
-                };
+                List<OperationSystemEntity> entities =
+                [
+                    new("ios"),
+                    new("android"),
+                ];
 
-                context.OperationSystem.AddRange(entity);
+                context.OperationSystems.AddRange(entities);
                 context.SaveChanges();
             }
         }

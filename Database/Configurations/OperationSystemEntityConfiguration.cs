@@ -8,7 +8,7 @@ namespace Database.Configurations
     {
         public void Configure(EntityTypeBuilder<OperationSystemEntity> builder)
         {
-            builder.ToTable("OperationSystem");
+            builder.ToTable("OperationSystems");
         }
     }
 }
