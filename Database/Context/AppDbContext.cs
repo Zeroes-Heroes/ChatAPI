@@ -27,6 +27,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new CountryCodesConfiguration());
 		modelBuilder.ApplyConfiguration(new ChatEntityConfiguration());
 		modelBuilder.ApplyConfiguration(new MessageStatusEntityConfiguration());
-		modelBuilder.ApplyConfiguration(new PushNotificationEntityConfiguration());
+		modelBuilder.ApplyConfiguration(new PushNotificationConfiguration());
 	}
 }

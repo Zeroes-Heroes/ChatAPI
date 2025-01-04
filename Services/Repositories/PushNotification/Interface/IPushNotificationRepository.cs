@@ -6,9 +6,9 @@ namespace Services.Repositories.PushNotification.Interface
 {
     public interface IPushNotificationRepository : IBaseRepository
     {
-        Task<PushNotificationEntity> AddDeviceData(PushNotificationEntity notificationEntity);
-        Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled);
-        Task<bool> CheckDeviceTokenExists(PushNotificationDTO notificationDTO, int userId);
-        Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(string deviceId, int userId);
+        Task AddDeviceData(PushNotificationEntity notificationEntity);
+        Task<bool> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled);
+        Task<bool> DoesDeviceTokenExist(string deviceToken, int userId);
+        Task<bool?> IsUserDeviceNotificationEnabled(string deviceId, int userId);
     }
 }

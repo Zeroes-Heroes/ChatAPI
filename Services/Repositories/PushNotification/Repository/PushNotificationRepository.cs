@@ -1,42 +1,46 @@
 using Database.Context;
 using Database.Entities;
 using Microsoft.EntityFrameworkCore;
-using Services.PushNotification.Models;
 using Services.Repositories.PushNotification.Interface;
 
 namespace Services.Repositories.PushNotification.Repository
 {
     public class PushNotificationRepository(AppDbContext dbContext) : IPushNotificationRepository
     {
-        public async Task<PushNotificationEntity> AddDeviceData(PushNotificationEntity notificationEntity)
+        public async Task AddDeviceData(PushNotificationEntity notificationEntity)
         {
             notificationEntity = dbContext.PushNotifications.Add(notificationEntity).Entity;
 
             await SaveChangesAsync();
-            return notificationEntity;
+            return;
         }
 
-        public async Task<PushNotificationEntity?> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled)
+        public async Task<bool> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled)
         {
             PushNotificationEntity? notificationData = await dbContext.PushNotifications.FirstOrDefaultAsync(n => n.UserDevice.DeviceId == deviceId && n.UserId == userId);
             if (notificationData == null || notificationData.IsNotificationEnabled == isNotificationEnabled)
             {
-                return null;
+                return false;
             }
 
             notificationData.IsNotificationEnabled = isNotificationEnabled;
 
             await SaveChangesAsync();
 
-            return notificationData;
+            return true;
         }
 
-        public Task<bool> CheckDeviceTokenExists(PushNotificationDTO notificationDTO, int userId) =>
-            dbContext.PushNotifications.AnyAsync(p => p.Token == notificationDTO.Token && p.UserId == userId);
+        public Task<bool> DoesDeviceTokenExist(string deviceToken, int userId) =>
+            dbContext.PushNotifications.AnyAsync(p => p.Token == deviceToken && p.UserId == userId);
 
-        public Task<PushNotificationEntity?> GetPushNotificationIdByDeviceId(string deviceId, int userId)
+        public async Task<bool?> IsUserDeviceNotificationEnabled(string deviceId, int userId)
         {
-            return dbContext.PushNotifications.FirstOrDefaultAsync(r => r.UserDevice.DeviceId == deviceId && r.UserId == userId);
+            var result = await dbContext.PushNotifications.FirstOrDefaultAsync(r => r.UserDevice.DeviceId == deviceId && r.UserId == userId);
+            if (result == null)
+            {
+                return null;
+            }
+            return result.IsNotificationEnabled;
         }
 
         public Task SaveChangesAsync() =>
