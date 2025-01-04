@@ -1,7 +1,4 @@
 ﻿using Database.Context;
-using Database.Seeders;
-using Database.Seeders.Interfaces;
-using Database.Seeders.Services;
 using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -172,8 +169,6 @@ public static class ServiceCollectionExtension
 			.AddScoped<IPushNotification, PushNotificationService>()
 			.AddScoped<IPushNotificationRepository, PushNotificationRepository>()
 			.AddScoped<IOperationSystemRepository, OperationSystemRepository>()
-			.AddTransient<ISeeder, OperationSystemSeeder>()
-			.AddTransient<SeederRunner>()
 			.AddSignalR()
 				 .AddMessagePackProtocol(options =>
 				 {
