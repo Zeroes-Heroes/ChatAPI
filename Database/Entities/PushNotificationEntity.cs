@@ -1,13 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Database.Enums;
 
 namespace Database.Entities
 {
     public class PushNotificationEntity
     {
-        public PushNotificationEntity(int oS, string token, bool IsNotificationEnabled, int UserId, int deviceId)
+        public PushNotificationEntity(OperatingSystemType operatingSystem, string token, bool IsNotificationEnabled, int UserId, int deviceId)
         {
-            OS = oS;
+            OperatingSystem = operatingSystem;
             Token = token;
             this.IsNotificationEnabled = IsNotificationEnabled;
             this.UserId = UserId;
@@ -24,7 +25,7 @@ namespace Database.Entities
         public int DeviceId { get; set; }
 
         [Required]
-        public int OS { get; set; }
+        public OperatingSystemType OperatingSystem { get; set; }
 
         [Required]
         public string Token { get; set; }
@@ -36,8 +37,5 @@ namespace Database.Entities
 
         [ForeignKey(nameof(DeviceId))]
         public virtual UserDeviceEntity UserDevice { get; set; } = null!;
-
-        [ForeignKey(nameof(OS))]
-        public virtual OperationSystemEntity OperationSystem { get; set; } = null!;
     }
 }

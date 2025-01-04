@@ -1,22 +1,22 @@
 using Database.Entities;
+using Database.Enums;
 using Services.PushNotification.Interface;
 using Services.PushNotification.Models;
-using Services.Repositories.OperationSystem.Interface;
 using Services.Repositories.PushNotification.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities;
 
 namespace Services.PushNotification.Service
 {
-    public class PushNotificationService(IPushNotificationRepository pushNotificationRepo, IUserRepository userRepo, IOperationSystemRepository operationSystemRepo) : IPushNotification
+    public class PushNotificationService(IPushNotificationRepository pushNotificationRepo, IUserRepository userRepo) : IPushNotification
     {
         public async Task<Result> SubscribeForPushNotification(PushNotificationDTO deviceData, int userId, string deviceId)
         {
-            bool checkDeviceTokenExists = await pushNotificationRepo.CheckDeviceTokenExists(deviceData, userId);
-            if (checkDeviceTokenExists)
+            bool isExistingOperatingSystemCheck = Enum.TryParse(deviceData.OS, true, out OperatingSystemType operatingSystemType);
+            if (!isExistingOperatingSystemCheck)
             {
-                return Result.Failure("This Device token already exists");
-            };
+                return Result.Failure($"This operating system {deviceData.OS} is not supported");
+            }
 
             var userDevice = await userRepo.GetDeviceByDeviceId(deviceId);
             if (userDevice == null)
@@ -24,13 +24,13 @@ namespace Services.PushNotification.Service
                 return Result.Failure("Device Id doesn't exists");
             }
 
-            var operationSystemId = await operationSystemRepo.GetOperationSystemId(deviceData.OS);
-            if (operationSystemId == null)
+            bool checkDeviceTokenExists = await pushNotificationRepo.CheckDeviceTokenExists(deviceData, userId);
+            if (checkDeviceTokenExists)
             {
-                return Result.Failure($"This operating system {deviceData.OS} is not maintained");
-            }
+                return Result.Failure("This Device token already exists");
+            };
 
-            PushNotificationEntity notificationEntity = new(operationSystemId.Value, deviceData.Token, IsNotificationEnabled: true, UserId: userId, userDevice.Id);
+            PushNotificationEntity notificationEntity = new(operatingSystemType, deviceData.Token, IsNotificationEnabled: true, UserId: userId, userDevice.Id);
 
             await pushNotificationRepo.AddDeviceData(notificationEntity);
 

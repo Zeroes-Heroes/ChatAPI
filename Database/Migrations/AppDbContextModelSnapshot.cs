@@ -159,23 +159,6 @@ namespace Database.Migrations
                     b.ToTable("MessagesStatus");
                 });
 
-            modelBuilder.Entity("Database.Entities.OperationSystemEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("TypeOS")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("OperationSystems", (string)null);
-                });
-
             modelBuilder.Entity("Database.Entities.PushNotificationEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -190,7 +173,7 @@ namespace Database.Migrations
                     b.Property<bool>("IsNotificationEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("OS")
+                    b.Property<int>("OperatingSystem")
                         .HasColumnType("integer");
 
                     b.Property<string>("Token")
@@ -204,8 +187,6 @@ namespace Database.Migrations
 
                     b.HasIndex("DeviceId")
                         .IsUnique();
-
-                    b.HasIndex("OS");
 
                     b.HasIndex("UserId");
 
@@ -362,21 +343,12 @@ namespace Database.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_PushNotification_DeviceId_UserDevice_Id");
 
-                    b.HasOne("Database.Entities.OperationSystemEntity", "OperationSystem")
-                        .WithMany("PushNotifications")
-                        .HasForeignKey("OS")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_PushNotifications_OS_OperationSystem_Id");
-
                     b.HasOne("Database.Entities.UserEntity", "User")
                         .WithMany("PushNotifications")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("FK_PushNotifications_UserId_Users_Id");
-
-                    b.Navigation("OperationSystem");
 
                     b.Navigation("User");
 
@@ -410,11 +382,6 @@ namespace Database.Migrations
             modelBuilder.Entity("Database.Entities.MessageEntity", b =>
                 {
                     b.Navigation("MessageStatusEntities");
-                });
-
-            modelBuilder.Entity("Database.Entities.OperationSystemEntity", b =>
-                {
-                    b.Navigation("PushNotifications");
                 });
 
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
