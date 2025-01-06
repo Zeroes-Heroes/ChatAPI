@@ -8,7 +8,7 @@ namespace Services.Repositories.PushNotification.Interface
     {
         void AddDeviceData(PushNotificationEntity notificationEntity);
         Task<bool> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled);
-        Task<bool> DoesDeviceTokenExist(string deviceToken, int userId);
+        Task<bool> IsIsTokenExistsForUser(string deviceToken, int userId);
         Task<bool> IsUserDeviceNotificationEnabled(string deviceId, int userId);
     }
 }

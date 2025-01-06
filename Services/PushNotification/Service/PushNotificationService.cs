@@ -18,8 +18,8 @@ namespace Services.PushNotification.Service
                 return Result.Failure($"This operating system {deviceData.OS} is not supported");
             }
 
-            bool isDeviceTokenExist = await pushNotificationRepo.DoesDeviceTokenExist(deviceData.Token, userId);
-            if (isDeviceTokenExist)
+            bool isDeviceTokenExistForUser = await pushNotificationRepo.IsIsTokenExistsForUser(deviceData.Token, userId);
+            if (isDeviceTokenExistForUser)
             {
                 return Result.Failure("Something went wrong with your device token");
             };

@@ -27,7 +27,7 @@ namespace Services.Repositories.PushNotification.Repository
             return true;
         }
 
-        public Task<bool> DoesDeviceTokenExist(string deviceToken, int userId) =>
+        public Task<bool> IsIsTokenExistsForUser(string deviceToken, int userId) =>
             dbContext.PushNotifications.AnyAsync(p => p.Token == deviceToken && p.UserId == userId);
 
         public Task<bool> IsUserDeviceNotificationEnabled(string deviceId, int userId) =>
