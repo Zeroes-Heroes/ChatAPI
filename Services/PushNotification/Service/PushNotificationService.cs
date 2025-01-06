@@ -18,21 +18,19 @@ namespace Services.PushNotification.Service
                 return Result.Failure($"This operating system {deviceData.OS} is not supported");
             }
 
-            var userDevice = await userRepo.GetDeviceByDeviceId(deviceId);
-            if (userDevice == null)
-            {
-                return Result.Failure("Device Id doesn't exists");
-            }
-
             bool isDeviceTokenExist = await pushNotificationRepo.DoesDeviceTokenExist(deviceData.Token, userId);
             if (isDeviceTokenExist)
             {
-                return Result.Failure("This Device token already exists");
+                return Result.Failure("Something went wrong with your device token");
             };
 
-            PushNotificationEntity notificationEntity = new(operatingSystemType, deviceData.Token, IsNotificationEnabled: true, userId, userDevice.Id);
+            int userDeviceId = await userRepo.GetDeviceByDeviceId(deviceId);
 
-            await pushNotificationRepo.AddDeviceData(notificationEntity);
+            PushNotificationEntity notificationEntity = new(operatingSystemType, deviceData.Token, IsNotificationEnabled: true, userId, userDeviceId);
+
+            pushNotificationRepo.AddDeviceData(notificationEntity);
+
+            await pushNotificationRepo.SaveChangesAsync();
 
             return Result.Success();
         }
@@ -42,7 +40,7 @@ namespace Services.PushNotification.Service
             bool result = await pushNotificationRepo.UpdateDeviceData(userId, deviceId, request.IsNotificationEnabled);
             if (!result)
             {
-                return Result.Failure("No data found or new record is the same with old record");
+                return Result.Failure("No data found or new record is the same as old record");
             }
 
             return Result.Success();
