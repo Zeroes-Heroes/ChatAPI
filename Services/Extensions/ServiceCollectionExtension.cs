@@ -11,17 +11,17 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Services.Chat.Interface;
 using Services.Chat.Service;
+using Services.DeviceNotificationConfig.Interface;
+using Services.DeviceNotificationConfig.Service;
 using Services.Friendship.Interface;
 using Services.Friendship.Service;
 using Services.Hubs.Resolvers;
-using Services.PushNotification.Interface;
-using Services.PushNotification.Service;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
+using Services.Repositories.DeviceNotificationConfig.Interface;
+using Services.Repositories.DeviceNotificationConfig.Repository;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.Friendship.Repository;
-using Services.Repositories.PushNotification.Interface;
-using Services.Repositories.PushNotification.Repository;
 using Services.Repositories.Resources.Interface;
 using Services.Repositories.Resources.Repository;
 using Services.Repositories.User.Interface;
@@ -164,8 +164,8 @@ public static class ServiceCollectionExtension
 			.AddScoped<IResourceRepository, ResourceRepository>()
 			.AddScoped<IChatService, ChatService>()
 			.AddScoped<IChatRepository, ChatRepository>()
-			.AddScoped<IPushNotification, PushNotificationService>()
-			.AddScoped<IPushNotificationRepository, PushNotificationRepository>()
+			.AddScoped<IDeviceNotificationConfig, DeviceNotificationConfigService>()
+			.AddScoped<IDeviceNotificationConfigRepository, DeviceNotificationConfigRepository>()
 			.AddSignalR()
 				 .AddMessagePackProtocol(options =>
 				 {

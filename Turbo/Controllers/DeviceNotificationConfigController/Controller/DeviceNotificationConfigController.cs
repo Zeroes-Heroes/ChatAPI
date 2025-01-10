@@ -1,20 +1,20 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Services.DeviceNotificationConfig.Interface;
+using Services.DeviceNotificationConfig.Models;
 using Services.Extensions;
-using Services.PushNotification.Interface;
-using Services.PushNotification.Models;
 
 namespace Turbo.Controllers.PushNotification.Controller
 {
     [ApiController]
     [Route("[controller]")]
     [Authorize]
-    public class PushNotificationController(IPushNotification pushNotificationService) : ControllerBase
+    public class NotificationController(IDeviceNotificationConfig deviceNotificationService) : ControllerBase
     {
         [HttpGet]
         public async Task<IActionResult> GetPushNotificationDeviceData()
         {
-            var result = await pushNotificationService.GetPushNotificationData(User.DeviceId(), User.Id());
+            var result = await deviceNotificationService.GetDeviceDataForNotification(User.DeviceId(), User.Id());
             if (result.IsSuccess)
             {
                 return Ok(result.Data);
@@ -24,9 +24,9 @@ namespace Turbo.Controllers.PushNotification.Controller
         }
 
         [HttpPost]
-        public async Task<IActionResult> SubscribeForPushNotification([FromBody] PushNotificationDTO deviceData)
+        public async Task<IActionResult> SubscribeForNotification([FromBody] DeviceNotificationDTO deviceData)
         {
-            var result = await pushNotificationService.SubscribeForPushNotification(deviceData, User.Id(), User.DeviceId());
+            var result = await deviceNotificationService.SubscribeDeviceForNotification(deviceData, User.Id(), User.DeviceId());
             if (result.IsSuccess)
             {
                 return Ok();
@@ -36,9 +36,9 @@ namespace Turbo.Controllers.PushNotification.Controller
         }
 
         [HttpPut]
-        public async Task<IActionResult> ChangePushNotificationStatus([FromBody] ChangeStatusRequest request)
+        public async Task<IActionResult> ChangeNotificationStatus([FromBody] ChangeStatusRequest request)
         {
-            var result = await pushNotificationService.ChangePushNotificationStatus(User.Id(), User.DeviceId(), request);
+            var result = await deviceNotificationService.ChangeDeviceNotificationStatus(User.Id(), User.DeviceId(), request);
             if (result.IsSuccess)
             {
                 return Ok();

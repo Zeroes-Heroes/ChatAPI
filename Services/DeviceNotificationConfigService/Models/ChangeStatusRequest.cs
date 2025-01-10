@@ -1,3 +1,3 @@
-namespace Services.PushNotification.Models;
+namespace Services.DeviceNotificationConfig.Models;
 
 public record ChangeStatusRequest(bool IsNotificationEnabled);

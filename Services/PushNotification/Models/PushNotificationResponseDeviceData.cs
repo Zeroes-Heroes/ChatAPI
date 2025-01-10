@@ -1,3 +1,0 @@
-namespace Services.PushNotification.Models;
-
-public record PushNotificationResponseDeviceData(bool IsNotificationEnabled);
