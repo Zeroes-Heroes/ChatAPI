@@ -81,6 +81,9 @@ public class UserRepository(AppDbContext dbContext) : IUserRepository
 	public Task<UserEntity?> GetUser(int userId) =>
 		dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
 
-	public Task<UserDeviceEntity?> GetIdByDeviceId(string deviceId) =>
-		dbContext.UserDevices.FirstOrDefaultAsync(d => d.DeviceId == deviceId);
+	public Task<int> GetUserDeviceIdByDeviceId(string deviceId) =>
+		dbContext.UserDevices
+			.Where(p => p.DeviceId == deviceId)
+			.Select(p => p.Id)
+			.SingleOrDefaultAsync();
 }

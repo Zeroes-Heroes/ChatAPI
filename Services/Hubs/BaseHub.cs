@@ -8,7 +8,8 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
 using Services.Hubs.Models;
-using Services.PushNotification.Service;
+using Services.NotificationDispatch.Interface;
+using Services.NotificationDispatch.Service;
 using Services.Utilities.Statics;
 using System.Security.Claims;
 
@@ -136,7 +137,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
-		PushNotificationService pushNotification = serviceProvider.GetRequiredService<PushNotificationService>();
+		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<NotificationDispatchService>();
 
 		ClaimsPrincipal? user = Context.User;
 
@@ -190,7 +191,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				continue;
 
 			// Send a notification to each user participating in the chat, excluding the user who sender the message
-			pushNotification.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
+			notificationDispatch.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
 
 			await Clients
 				.GetUserById(senderId)

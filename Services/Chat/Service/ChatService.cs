@@ -5,7 +5,7 @@ using Services.Chat.Models.CreateChat;
 using Services.Chat.Models.Events;
 using Services.Chat.Models.GetChats;
 using Services.Hubs;
-using Services.PushNotification.Interface;
+using Services.NotificationDispatch.Interface;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.User.Interface;
@@ -15,7 +15,7 @@ using static Services.Utilities.Statics.LiveEvents;
 
 namespace Services.Chat.Service;
 
-internal class ChatService(IChatRepository chatRepository, IUserRepository userRepository, IFriendshipRepository friendshipRepository, IHubContext<BaseHub> hubContext, IPushNotification pushNotification) : IChatService
+internal class ChatService(IChatRepository chatRepository, IUserRepository userRepository, IFriendshipRepository friendshipRepository, IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatch) : IChatService
 {
 	public async Task<Result> CreateChat(CreateChatRequest createChatRequest, int chatCreatorId)
 	{
@@ -34,7 +34,7 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 		SendEventChatCreated(chatCreatedEvent);
 		
 		// Send a notification to each user participating in the chat, excluding the user who created the chat
-		pushNotification.NotificationForNewCreateChat(createChatRequest.UserIds, chatCreatorId, chatEntity.Id);
+		notificationDispatch.NotificationForNewCreateChat(createChatRequest.UserIds, chatCreatorId, chatEntity.Id);
 
 		return Result.Success();
 	}

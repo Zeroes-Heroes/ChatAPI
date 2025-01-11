@@ -1,5 +1,4 @@
 using Database.Context;
-using Database.Seeders.Services;
 using Services.Extensions;
 using Services.Hubs;
 using Services.Utilities;
@@ -63,12 +62,7 @@ public class Program
 
 		using (IServiceScope scope = app.Services.CreateScope())
 		{
-			var service = scope.ServiceProvider;
-			var context = service.GetRequiredService<AppDbContext>();
-			var seederRunner = service.GetRequiredService<SeederRunner>();
-
-			context.ApplyMigrations();
-			seederRunner.RunSeeders(context);
+			scope.ServiceProvider.GetRequiredService<AppDbContext>().ApplyMigrations();
 		}
 
 		app.Run();
