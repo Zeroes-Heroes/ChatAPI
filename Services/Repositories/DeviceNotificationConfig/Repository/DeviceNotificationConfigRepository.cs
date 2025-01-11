@@ -43,7 +43,7 @@ namespace Services.Repositories.DeviceNotificationConfig.Repository
                 {
                     OS = pushNotification.OperatingSystem,
                     Token = pushNotification.Token,
-                    IsTurnOnNotification = pushNotification.IsNotificationEnabled,
+                    IsNotificationEnabled = pushNotification.IsNotificationEnabled,
                 }).ToListAsync();
         }
 
