@@ -136,6 +136,6 @@ public class UserService(IUserRepository userRepo, ITokenService tokenService, I
 		if (user is null)
 			return Result<UserLoginResponseDTO>.Failure("The login credentials are invalid.", HttpStatusCode.Unauthorized);
 
-		return Result<UserLoginResponseDTO>.Success(new(user.Name, await tokenService.GenerateTokens(user!.Id), user.Id));
+		return Result<UserLoginResponseDTO>.Success(new(user.Name, await tokenService.GenerateTokens(user!.Id, dto.DeviceId), user.Id));
 	}
 }

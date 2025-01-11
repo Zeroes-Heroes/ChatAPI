@@ -1,0 +1,3 @@
+namespace Services.DeviceNotificationConfig.Models;
+
+public record DeviceNotificationResponseDeviceData(bool IsNotificationEnabled);
