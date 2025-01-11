@@ -22,12 +22,10 @@ namespace Services.Repositories.DeviceNotificationConfig.Repository
 
             notificationData.IsNotificationEnabled = isNotificationEnabled;
 
-            await SaveChangesAsync();
-
             return true;
         }
 
-        public Task<bool> IsTokenExistsForUser(string deviceToken, int userId) =>
+        public Task<bool> DoesTokenExistForUser(string deviceToken, int userId) =>
             dbContext.DeviceNotificationsConfig.AnyAsync(p => p.Token == deviceToken && p.UserId == userId);
 
         public Task<bool> IsUserDeviceNotificationEnabled(string deviceId, int userId) =>

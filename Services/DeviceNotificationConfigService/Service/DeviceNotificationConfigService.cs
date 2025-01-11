@@ -18,13 +18,13 @@ namespace Services.DeviceNotificationConfig.Service
                 return Result.Failure($"This operating system {deviceData.OS} is not supported");
             }
 
-            bool isDeviceTokenExistForUser = await deviceNotificationConfigRepo.IsTokenExistsForUser(deviceData.Token, userId);
-            if (isDeviceTokenExistForUser)
+            bool doesTokenExistForUser = await deviceNotificationConfigRepo.DoesTokenExistForUser(deviceData.Token, userId);
+            if (doesTokenExistForUser)
             {
                 return Result.Failure("Something went wrong with your device token");
             };
 
-            int userDeviceId = await userRepo.GetDeviceByDeviceId(deviceId);
+            int userDeviceId = await userRepo.GetUserDeviceIdByDeviceId(deviceId);
 
             DeviceNotificationConfigEntity notificationEntity = new(operatingSystemType, deviceData.Token, IsNotificationEnabled: true, userId, userDeviceId);
 
@@ -40,8 +40,10 @@ namespace Services.DeviceNotificationConfig.Service
             bool result = await deviceNotificationConfigRepo.UpdateDeviceData(userId, deviceId, request.IsNotificationEnabled);
             if (!result)
             {
-                return Result.Failure("No data found or new record is the same as old record");
+                return Result.Failure("No data found or the new record is the same as the old record");
             }
+
+            await deviceNotificationConfigRepo.SaveChangesAsync();
 
             return Result.Success();
         }
@@ -51,7 +53,7 @@ namespace Services.DeviceNotificationConfig.Service
             bool? isNotificationEnabled = await deviceNotificationConfigRepo.IsUserDeviceNotificationEnabled(deviceId, userId);
             if (isNotificationEnabled == null)
             {
-                return Result<DeviceNotificationResponseDeviceData>.Failure("Push Notification Data not found");
+                return Result<DeviceNotificationResponseDeviceData>.Failure("Notification data not found");
             }
 
             DeviceNotificationResponseDeviceData pushNotificationData = new(isNotificationEnabled ?? false);

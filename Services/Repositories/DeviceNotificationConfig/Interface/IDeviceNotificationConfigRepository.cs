@@ -7,7 +7,7 @@ namespace Services.Repositories.DeviceNotificationConfig.Interface
     {
         void AddDeviceData(DeviceNotificationConfigEntity notificationEntity);
         Task<bool> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled);
-        Task<bool> IsTokenExistsForUser(string deviceToken, int userId);
+        Task<bool> DoesTokenExistForUser(string deviceToken, int userId);
         Task<bool> IsUserDeviceNotificationEnabled(string deviceId, int userId);
     }
 }
