@@ -197,59 +197,6 @@ namespace Database.Migrations
                     b.ToTable("MessagesStatus");
                 });
 
-            modelBuilder.Entity("Database.Entities.OperationSystemEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("TypeOS")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("OperationSystem", (string)null);
-                });
-
-            modelBuilder.Entity("Database.Entities.PushNotificationEntity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DeviceId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsTurnOnNotification")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("OS")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DeviceId")
-                        .IsUnique();
-
-                    b.HasIndex("OS");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("PushNotification", (string)null);
-                });
-
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -421,36 +368,6 @@ namespace Database.Migrations
                     b.Navigation("Receiver");
                 });
 
-            modelBuilder.Entity("Database.Entities.PushNotificationEntity", b =>
-                {
-                    b.HasOne("Database.Entities.UserDeviceEntity", "UserDevice")
-                        .WithOne("PushNotification")
-                        .HasForeignKey("Database.Entities.PushNotificationEntity", "DeviceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_PushNotification_DeviceId_UserDevice_Id");
-
-                    b.HasOne("Database.Entities.OperationSystemEntity", "OperationSystem")
-                        .WithMany("PushNotification")
-                        .HasForeignKey("OS")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_PushNotification_OS_OperationSystem_Id");
-
-                    b.HasOne("Database.Entities.UserEntity", "User")
-                        .WithMany("PushNotification")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_PushNotification_UserId_Users_Id");
-
-                    b.Navigation("OperationSystem");
-
-                    b.Navigation("User");
-
-                    b.Navigation("UserDevice");
-                });
-
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
                 {
                     b.HasOne("Database.Entities.DeviceNotificationConfigEntity", "DeviceNotificationsConfig")
@@ -486,15 +403,8 @@ namespace Database.Migrations
                     b.Navigation("MessageStatusEntities");
                 });
 
-            modelBuilder.Entity("Database.Entities.OperationSystemEntity", b =>
-                {
-                    b.Navigation("PushNotification");
-                });
-
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
                 {
-                    b.Navigation("PushNotification");
-
                     b.Navigation("UserLoginCode");
                 });
 
@@ -505,8 +415,6 @@ namespace Database.Migrations
                     b.Navigation("Friendships");
 
                     b.Navigation("MessageStatusEntities");
-
-                    b.Navigation("PushNotification");
 
                     b.Navigation("ReceivedFriendships");
 
