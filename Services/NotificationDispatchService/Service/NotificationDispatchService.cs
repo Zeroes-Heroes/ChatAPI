@@ -1,15 +1,17 @@
 using Database.Entities;
 using Database.Enums;
 using FirebaseAdmin.Messaging;
+using Microsoft.Extensions.Caching.Distributed;
 using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Models;
 using Services.Repositories.DeviceNotificationConfig.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities;
+using Services.Utilities.Statics;
 
 namespace Services.NotificationDispatch.Service
 {
-    public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService) : INotificationDispatch
+    public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IDistributedCache cache) : INotificationDispatch
     {
         private async Task<Result> SendPushNotificationToApple(string deviceToken, NotificationBody notificationInfo)
         {
@@ -81,6 +83,14 @@ namespace Services.NotificationDispatch.Service
                     await SendPushNotificationToAndroid(deviceToken, notificationBody);
                 }
             }
+        }
+
+        // TODO: Revisit
+        private async Task<bool> IsUserOnline(int userId)
+        {
+            string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
+            bool isUserOnline = await cache.GetAsync(connectionEstablishedCacheKey) != null;
+            return isUserOnline;
         }
 
         private async Task<string> GetUserNameById(int userId)
