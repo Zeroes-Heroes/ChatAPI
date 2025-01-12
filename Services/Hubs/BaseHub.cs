@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
 using Services.Hubs.Models;
 using Services.NotificationDispatch.Interface;
-using Services.NotificationDispatch.Service;
 using Services.Utilities.Statics;
 using System.Security.Claims;
 
@@ -137,7 +136,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
-		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<NotificationDispatchService>();
+		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<INotificationDispatch>();
 
 		ClaimsPrincipal? user = Context.User;
 
