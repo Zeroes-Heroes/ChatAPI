@@ -1,4 +1,3 @@
-using Database.Entities;
 using Database.Enums;
 using FirebaseAdmin.Messaging;
 using Microsoft.Extensions.Caching.Distributed;
@@ -95,8 +94,8 @@ namespace Services.NotificationDispatch.Service
 
         private async Task<string> GetUserNameById(int userId)
         {
-            UserEntity? userEntity = await userRepo.GetUser(userId);
-            return userEntity?.Name ?? "";
+            string? nameOfUser = await userRepo.GetUserNameById(userId);
+            return nameOfUser ?? "";
         }
 
         public async Task<Result> NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)

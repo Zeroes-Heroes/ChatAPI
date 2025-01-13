@@ -78,8 +78,11 @@ public class UserRepository(AppDbContext dbContext) : IUserRepository
 	public Task<UserEntity[]> GetUsers(int[] userIds) =>
 		dbContext.Users.Where(u => userIds.Contains(u.Id)).ToArrayAsync();
 
-	public Task<UserEntity?> GetUser(int userId) =>
-		dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
+	public Task<string?> GetUserNameById(int userId) =>
+		dbContext.Users
+			.Where(u => u.Id == userId)
+			.Select(u => u.Name)
+			.SingleOrDefaultAsync();
 
 	public Task<int> GetUserDeviceIdByDeviceId(string deviceId) =>
 		dbContext.UserDevices
