@@ -94,9 +94,12 @@ namespace Services.NotificationDispatch.Service
 
         private async Task<string> GetUserNameById(int userId)
         {
-            string? nameOfUser = await userRepo.GetUserNameById(userId);
-            return nameOfUser ?? "";
+            string nameOfUser = await userRepo.GetUserNameById(userId) ?? "";
+            return nameOfUser;
         }
+
+
+        // Public methods responsible for sending notifications to users
 
         public async Task<Result> NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
         {
