@@ -84,7 +84,7 @@ namespace Services.NotificationDispatch.Service
             }
         }
 
-        // TODO: Revisit
+        // TODO (Moved)
         private async Task<bool> IsUserOnline(int userId)
         {
             string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
@@ -114,6 +114,10 @@ namespace Services.NotificationDispatch.Service
             {
                 if (i != senderUserId)
                 {
+                    bool isUserOnline = await IsUserOnline(i);
+                    if (!isUserOnline)
+                        return Result.Success();
+
                     await SendNotification(i, notificationBody);
                 }
             }
@@ -137,6 +141,10 @@ namespace Services.NotificationDispatch.Service
             {
                 if (i != chatCreatorId)
                 {
+                    bool isUserOnline = await IsUserOnline(i);
+                    if (!isUserOnline)
+                        return Result.Success();
+
                     await SendNotification(i, notificationBody);
                 }
             }
@@ -146,6 +154,10 @@ namespace Services.NotificationDispatch.Service
 
         public async Task<Result> NotificationForNewFriendshipRequest(int userId, string name)
         {
+            bool isUserOnline = await IsUserOnline(userId);
+            if (!isUserOnline)
+                return Result.Success();
+
             NotificationBody notificationBody = new()
             {
                 Title = "New Request",
@@ -160,6 +172,10 @@ namespace Services.NotificationDispatch.Service
 
         public async Task<Result> NotificationForAcceptFriendship(int notificationRecipientId, int requestSenderId)
         {
+            bool isUserOnline = await IsUserOnline(notificationRecipientId);
+            if (!isUserOnline)
+                return Result.Success();
+
             string userName = await GetUserNameById(requestSenderId);
 
             NotificationBody notificationBody = new()
@@ -176,6 +192,10 @@ namespace Services.NotificationDispatch.Service
 
         public async Task<Result> NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
         {
+            bool isUserOnline = await IsUserOnline(notificationRecipientId);
+            if (!isUserOnline)
+                return Result.Success();
+
             string userName = await GetUserNameById(requestSenderId);
 
             NotificationBody notificationBody = new()
@@ -192,6 +212,10 @@ namespace Services.NotificationDispatch.Service
 
         public async Task<Result> NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
         {
+            bool isUserOnline = await IsUserOnline(notificationRecipientId);
+            if (!isUserOnline)
+                return Result.Success();
+
             string userName = await GetUserNameById(requestSenderId);
 
             NotificationBody notificationBody = new()
