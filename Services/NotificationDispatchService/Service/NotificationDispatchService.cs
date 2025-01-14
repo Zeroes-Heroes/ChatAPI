@@ -92,11 +92,8 @@ namespace Services.NotificationDispatch.Service
             return isUserOnline;
         }
 
-        private async Task<string> GetUserNameById(int userId)
-        {
-            string nameOfUser = await userRepo.GetUserNameById(userId) ?? "";
-            return nameOfUser;
-        }
+        private async Task<string> GetUserNameById(int userId) =>
+            await userRepo.GetUserNameById(userId) ?? "";
 
 
         // Public methods responsible for sending notifications to users
