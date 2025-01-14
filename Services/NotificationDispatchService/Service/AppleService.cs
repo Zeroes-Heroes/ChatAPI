@@ -7,12 +7,14 @@ using Services.Utilities.Models;
 
 namespace Services.NotificationDispatch.Service
 {
-    public class AppleService(HttpClient httpClient, IAppleTokenService appleTokenService, IOptions<AppSettings> appSettings) : IAppleService
+    public class AppleService(IAppleTokenService appleTokenService, IOptions<AppSettings> appSettings) : IAppleService
     {
         private readonly AppSettings appSettings = appSettings.Value;
 
         public async Task<Result> SendAsyncPushNotification(string deviceToken, object payload) // TODO replace "object" with "interface"
         {
+            HttpClient httpClient = new HttpClient();
+
             string token = await appleTokenService.GetPushNotificationToken();
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("bearer", token);
 
