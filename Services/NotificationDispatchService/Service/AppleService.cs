@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Options;
 using Services.NotificationDispatch.Interface;
+using Services.NotificationDispatch.Models;
 using Services.Token.Interface;
 using Services.Utilities;
 using Services.Utilities.Models;
@@ -11,7 +12,7 @@ namespace Services.NotificationDispatch.Service
     {
         private readonly AppSettings appSettings = appSettings.Value;
 
-        public async Task<Result> SendAsyncPushNotification(string deviceToken, object payload) // TODO replace "object" with "interface"
+        public async Task<Result> SendAsyncPushNotification(string deviceToken, AppleNotificationPayload payload)
         {
             HttpClient httpClient = new HttpClient();
 

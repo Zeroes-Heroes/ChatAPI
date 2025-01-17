@@ -14,21 +14,21 @@ namespace Services.NotificationDispatch.Service
     {
         private async Task<Result> SendPushNotificationToApple(string deviceToken, NotificationBody notificationInfo)
         {
-            var payload = new
+            AppleNotificationPayload payload = new()
             {
-                aps = new
+                aps = new ApplePushNotification
                 {
-                    alert = new
+                    Alert = new Alert
                     {
-                        title = notificationInfo.Title,
-                        body = notificationInfo.Body,
+                        Title = notificationInfo.Title,
+                        Body = notificationInfo.Body,
                     },
-                    sound = "default",
-                    route = notificationInfo.Route,
+                    Sound = "default",
+                    Route = notificationInfo.Route,
                     // "chatId" is provided only when the notification is for a chat; 
                     // in other cases, only the name of the screen to which the user should be navigated
                     // upon opening the notification is provided.
-                    chatId = notificationInfo?.ChatId,
+                    ChatId = notificationInfo?.ChatId.ToString()
                 }
             };
 
