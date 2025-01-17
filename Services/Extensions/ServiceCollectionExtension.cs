@@ -1,4 +1,6 @@
 ﻿using Database.Context;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,6 +18,8 @@ using Services.DeviceNotificationConfig.Service;
 using Services.Friendship.Interface;
 using Services.Friendship.Service;
 using Services.Hubs.Resolvers;
+using Services.NotificationDispatch.Interface;
+using Services.NotificationDispatch.Service;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
 using Services.Repositories.DeviceNotificationConfig.Interface;
@@ -156,6 +160,8 @@ public static class ServiceCollectionExtension
 	public static IServiceCollection AddServices(this IServiceCollection services) =>
 		services
 			.AddTransient<ITokenService, TokenService>()
+			.AddTransient<IAppleTokenService, AppleTokenService>()
+			.AddTransient<IAppleService, AppleService>()
 			.AddScoped<IUserRepository, UserRepository>()
 			.AddScoped<IFriendshipRepository, FriendshipRepository>()
 			.AddScoped<IUserService, UserService>()
@@ -166,6 +172,7 @@ public static class ServiceCollectionExtension
 			.AddScoped<IChatRepository, ChatRepository>()
 			.AddScoped<IDeviceNotificationConfig, DeviceNotificationConfigService>()
 			.AddScoped<IDeviceNotificationConfigRepository, DeviceNotificationConfigRepository>()
+			.AddScoped<INotificationDispatch, NotificationDispatchService>()
 			.AddSignalR()
 				 .AddMessagePackProtocol(options =>
 				 {
@@ -181,5 +188,23 @@ public static class ServiceCollectionExtension
 	{
 		TwilioClient.Init(configuration["TwillioAccountSid"], configuration["TwillioAuthToken"]);
 		return service;
+	}
+
+	public static IServiceCollection InitializeFirebase(this IServiceCollection services, IConfiguration configuration)
+	{
+		// TODO: Review the try {} catch block to either improve its error handling logic or remove it if unnecessary
+		try
+		{
+			string AndroidPrivateKeyPath = configuration["AndroidPrivateKeyPath"];
+			FirebaseApp.Create(new AppOptions()
+			{
+				Credential = GoogleCredential.FromFile(AndroidPrivateKeyPath)
+			});
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Firebase initialization error: {ex.Message}");
+		}
+		return services;
 	}
 }

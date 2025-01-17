@@ -7,7 +7,7 @@ namespace Services.Chat.Interface;
 
 public interface IChatService
 {
-	Task<Result> CreateChat(CreateChatRequest createChatRequestModel);
+	Task<Result> CreateChat(CreateChatRequest createChatRequestModel, int chatCreatorId);
 	Task<Result<GetChatsResponse[]>> GetChats(int userId);
 	void SendEventChatCreated(ChatCreatedEvent chatCreatedEventModel);
 }

@@ -1,6 +1,7 @@
 using Database.Context;
 using Database.Entities;
 using Microsoft.EntityFrameworkCore;
+using Services.NotificationDispatch.Models;
 using Services.Repositories.DeviceNotificationConfig.Interface;
 
 namespace Services.Repositories.DeviceNotificationConfig.Repository
@@ -33,6 +34,18 @@ namespace Services.Repositories.DeviceNotificationConfig.Repository
                 .Where(r => r.UserDevice.DeviceId == deviceId && r.UserId == userId)
                 .Select(p => p.IsNotificationEnabled)
                 .SingleOrDefaultAsync();
+
+
+        public async Task<List<DeviceDataResponse>> FetchEnabledUserDeviceDataById(int userId)
+        {
+            return await dbContext.DeviceNotificationsConfig.Where(r => r.UserId == userId && r.IsNotificationEnabled == true)
+                .Select(pushNotification => new DeviceDataResponse
+                {
+                    OS = pushNotification.OperatingSystem,
+                    Token = pushNotification.Token,
+                    IsNotificationEnabled = pushNotification.IsNotificationEnabled,
+                }).ToListAsync();
+        }
 
         public Task SaveChangesAsync() =>
             dbContext.SaveChangesAsync();
