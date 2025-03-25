@@ -34,7 +34,7 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 		SendEventChatCreated(chatCreatedEvent);
 		
 		// Send a notification to each user participating in the chat, excluding the user who created the chat
-		notificationDispatch.NotificationForNewCreateChat(createChatRequest.UserIds, chatCreatorId, chatEntity.Id);
+		notificationDispatch.NotificationForNewChat(createChatRequest.UserIds, chatCreatorId, chatEntity.Id);
 
 		return Result.Success();
 	}

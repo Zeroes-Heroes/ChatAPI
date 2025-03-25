@@ -7,6 +7,8 @@ using Services.Repositories.DeviceNotificationConfig.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities;
 using Services.Utilities.Statics;
+using Services.Constants;
+using Twilio.TwiML.Voice;
 
 namespace Services.NotificationDispatch.Service
 {
@@ -106,7 +108,7 @@ namespace Services.NotificationDispatch.Service
             {
                 Title = $"{userName} send you a message",
                 Body = message,
-                Route = "Chats",
+                Route = ScreenNames.ChatScreen,
                 ChatId = chatId,
             };
 
@@ -125,27 +127,27 @@ namespace Services.NotificationDispatch.Service
             return Result.Success();
         }
 
-        public async Task<Result> NotificationForNewCreateChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
+        public async Task<Result> NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
         {
             string userName = await GetUserNameById(chatCreatorId);
 
             NotificationBody notificationBody = new()
             {
                 Title = "New Created chat",
-                Body = $"{userName} created chat with you",
-                Route = "Chats",
+                Body = $"{userName} created chat with you.",
+                Route = ScreenNames.ChatScreen,
                 ChatId = chatId,
             };
 
-            for (int i = 0; i < chatParticipantIds.Count(); i++)
+            foreach (int userId in chatParticipantIds)
             {
-                if (i != chatCreatorId)
+                if (userId != chatCreatorId)
                 {
-                    bool isUserOnline = await IsUserOnline(i);
+                    bool isUserOnline = await IsUserOnline(userId);
                     if (!isUserOnline)
                         return Result.Success();
 
-                    await SendNotification(i, notificationBody);
+                    await SendNotification(userId, notificationBody);
                 }
             }
 
@@ -162,7 +164,7 @@ namespace Services.NotificationDispatch.Service
             {
                 Title = "New Request",
                 Body = $"{name} you send new friendship request",
-                Route = "Requests",
+                Route = ScreenNames.RequestsScreen,
             };
 
             await SendNotification(userId, notificationBody);
@@ -182,7 +184,7 @@ namespace Services.NotificationDispatch.Service
             {
                 Title = "Accepted request",
                 Body = $"{userName} accepted your friend request",
-                Route = "Contacts",
+                Route = ScreenNames.ContactsScreen,
             };
 
             await SendNotification(notificationRecipientId, notificationBody);
@@ -202,7 +204,7 @@ namespace Services.NotificationDispatch.Service
             {
                 Title = "Rejected request",
                 Body = $"{userName} reject your friend request",
-                Route = "RejectedRequests",
+                Route = ScreenNames.RejectedRequestsScreen,
             };
 
             await SendNotification(notificationRecipientId, notificationBody);
@@ -222,7 +224,7 @@ namespace Services.NotificationDispatch.Service
             {
                 Title = "Blocker request",
                 Body = $"{userName} block your friend request",
-                Route = "BlockedContacts",
+                Route = ScreenNames.BlockedContactsScreen,
             };
 
             await SendNotification(notificationRecipientId, notificationBody);
