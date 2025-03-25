@@ -20,7 +20,7 @@ namespace Services.Token.Service
         {
             string privateKeyText = File.ReadAllText(appSettings.ApplePrivateKeyPath, Encoding.UTF8);
 
-            using var ecdsa = GetEcdsaParametersFromPrivateKey(privateKeyText);
+            using ECDsa ecdsa = GetEcdsaParametersFromPrivateKey(privateKeyText);
 
             long iat = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds();
 

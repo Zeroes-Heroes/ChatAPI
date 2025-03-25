@@ -30,7 +30,7 @@ namespace Services.NotificationDispatch.Service
                     // "chatId" is provided only when the notification is for a chat; 
                     // in other cases, only the name of the screen to which the user should be navigated
                     // upon opening the notification is provided.
-                    ChatId = notificationInfo?.ChatId.ToString()
+                    ChatId = notificationInfo?.ChatId?.ToString() ?? string.Empty,
                 }
             };
 
@@ -77,11 +77,13 @@ namespace Services.NotificationDispatch.Service
                 if (deviceData.OS == OperatingSystemType.ios)
                 {
                     await SendPushNotificationToApple(deviceToken, notificationBody);
+                    continue;
                 }
 
                 if (deviceData.OS == OperatingSystemType.android)
                 {
                     await SendPushNotificationToAndroid(deviceToken, notificationBody);
+                    continue;
                 }
             }
         }
@@ -172,7 +174,7 @@ namespace Services.NotificationDispatch.Service
             return Result.Success();
         }
 
-        public async Task<Result> NotificationForAcceptFriendship(int notificationRecipientId, int requestSenderId)
+        public async Task<Result> NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId)
         {
             bool isUserOnline = await IsUserOnline(notificationRecipientId);
             if (!isUserOnline)

@@ -96,7 +96,7 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 		switch (newStatus)
 		{
 			case FriendshipStatus.Accepted:
-				notificationDispatch.NotificationForAcceptFriendship(senderUserId, targetUserId);
+				notificationDispatch.NotificationAcceptFriendship(senderUserId, targetUserId);
 				break;
 			case FriendshipStatus.Rejected:
 				notificationDispatch.NotificationForRejectedFriendship(senderUserId, targetUserId);
