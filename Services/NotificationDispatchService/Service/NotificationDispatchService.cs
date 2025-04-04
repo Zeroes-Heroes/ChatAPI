@@ -113,15 +113,15 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            for (int i = 0; i < receiversIds.Count(); i++)
+            foreach (int userId in receiversIds)
             {
-                if (i != senderUserId)
+                if (userId != senderUserId)
                 {
-                    bool isUserOnline = await IsUserOnline(i);
+                    bool isUserOnline = await IsUserOnline(userId);
                     if (!isUserOnline)
                         return Result.Success();
 
-                    await SendNotification(i, notificationBody);
+                    await SendNotification(userId, notificationBody);
                 }
             }
 
