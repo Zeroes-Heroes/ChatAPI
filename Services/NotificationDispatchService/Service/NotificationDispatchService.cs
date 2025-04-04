@@ -66,11 +66,9 @@ namespace Services.NotificationDispatch.Service
         //  IMPORTANT: There is a possibility that, with the change in the ability to manage which notifications
         //  to receive and which not, the method may start receiving an array of data for each device to which it
         //  should send a notification as the first parameter.
-        private async Task SendNotification(int userId, NotificationBody notificationBody)
+        private async Task SendNotification(List<DeviceDataResponse> deviceDataList, NotificationBody notificationBody)
         {
-            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
-
-            foreach (var deviceData in result)
+            foreach (var deviceData in deviceDataList)
             {
                 string deviceToken = deviceData.Token;
                 if (deviceData.OS == OperatingSystemType.ios)
@@ -87,6 +85,30 @@ namespace Services.NotificationDispatch.Service
             }
         }
 
+        private async Task GetUserDataAndSendNotification(int[] receiversIds, int skippedUser, NotificationBody notificationBody)
+        {
+            List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
+            foreach (int userId in receiversIds)
+            {
+                if (userId != skippedUser)
+                {
+                    bool isUserOnline = await IsUserOnline(userId);
+                    if (!isUserOnline)
+                        return;
+
+                    var userDevices = results.Where(d => d.UserId == userId)
+                        .Select(d => new DeviceDataResponse
+                        {
+                            OS = d.OS,
+                            Token = d.Token,
+                            IsNotificationEnabled = d.IsNotificationEnabled,
+                        }).ToList();
+
+                    await SendNotification(userDevices, notificationBody);
+                }
+            }
+        }
+
         // TODO (Moved)
         private async Task<bool> IsUserOnline(int userId)
         {
@@ -98,8 +120,6 @@ namespace Services.NotificationDispatch.Service
         private async Task<string> GetUserNameById(int userId) =>
             await userRepo.GetUserNameById(userId) ?? "";
 
-
-        // Public methods responsible for sending notifications to users
 
         public async Task<Result> NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
         {
@@ -113,17 +133,7 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            foreach (int userId in receiversIds)
-            {
-                if (userId != senderUserId)
-                {
-                    bool isUserOnline = await IsUserOnline(userId);
-                    if (!isUserOnline)
-                        return Result.Success();
-
-                    await SendNotification(userId, notificationBody);
-                }
-            }
+            await GetUserDataAndSendNotification(receiversIds, senderUserId, notificationBody);
 
             return Result.Success();
         }
@@ -140,17 +150,7 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            foreach (int userId in chatParticipantIds)
-            {
-                if (userId != chatCreatorId)
-                {
-                    bool isUserOnline = await IsUserOnline(userId);
-                    if (!isUserOnline)
-                        return Result.Success();
-
-                    await SendNotification(userId, notificationBody);
-                }
-            }
+            await GetUserDataAndSendNotification(chatParticipantIds, chatCreatorId, notificationBody);
 
             return Result.Success();
         }
@@ -167,8 +167,9 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{name} you send new friendship request",
                 Route = ScreenNames.RequestsScreen,
             };
+            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
 
-            await SendNotification(userId, notificationBody);
+            await SendNotification(result, notificationBody);
 
             return Result.Success();
         }
@@ -187,8 +188,9 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} accepted your friend request",
                 Route = ScreenNames.ContactsScreen,
             };
+            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(notificationRecipientId);
 
-            await SendNotification(notificationRecipientId, notificationBody);
+            await SendNotification(result, notificationBody);
 
             return Result.Success();
         }
@@ -207,8 +209,9 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} reject your friend request",
                 Route = ScreenNames.RejectedRequestsScreen,
             };
+            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(notificationRecipientId);
 
-            await SendNotification(notificationRecipientId, notificationBody);
+            await SendNotification(result, notificationBody);
 
             return Result.Success();
         }
@@ -227,8 +230,9 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} block your friend request",
                 Route = ScreenNames.BlockedContactsScreen,
             };
+            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(notificationRecipientId);
 
-            await SendNotification(notificationRecipientId, notificationBody);
+            await SendNotification(result, notificationBody);
 
             return Result.Success();
         }
