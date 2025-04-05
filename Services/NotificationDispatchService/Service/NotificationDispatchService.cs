@@ -102,8 +102,7 @@ namespace Services.NotificationDispatch.Service
                 if (userId != skippedUser)
                 {
                     bool isUserOnline = await IsUserOnline(userId);
-                    if (!isUserOnline)
-                        return;
+                    if (!isUserOnline) return;
 
                     var userDevices = results.Where(d => d.UserId == userId)
                         .Select(d => new DeviceDataResponse
@@ -116,6 +115,16 @@ namespace Services.NotificationDispatch.Service
                     await SendNotification(userDevices, notificationBody);
                 }
             }
+        }
+
+        private async Task NotifyOnlineUserAsync(int userId, NotificationBody notificationBody)
+        {
+            bool isUserOnline = await IsUserOnline(userId);
+            if (!isUserOnline) return;
+
+            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
+
+            await SendNotification(result, notificationBody);
         }
 
         private async Task<string> GetUserNameById(int userId) =>
@@ -158,29 +167,20 @@ namespace Services.NotificationDispatch.Service
 
         public async Task<Result> NotificationForNewFriendshipRequest(int userId, string name)
         {
-            bool isUserOnline = await IsUserOnline(userId);
-            if (!isUserOnline)
-                return Result.Success();
-
             NotificationBody notificationBody = new()
             {
                 Title = "New Request",
                 Body = $"{name} you send new friendship request",
                 Route = ScreenNames.RequestsScreen,
             };
-            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
 
-            await SendNotification(result, notificationBody);
+            await NotifyOnlineUserAsync(userId, notificationBody);
 
             return Result.Success();
         }
 
         public async Task<Result> NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId)
         {
-            bool isUserOnline = await IsUserOnline(notificationRecipientId);
-            if (!isUserOnline)
-                return Result.Success();
-
             string userName = await GetUserNameById(requestSenderId);
 
             NotificationBody notificationBody = new()
@@ -189,19 +189,13 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} accepted your friend request",
                 Route = ScreenNames.ContactsScreen,
             };
-            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(notificationRecipientId);
-
-            await SendNotification(result, notificationBody);
+            await NotifyOnlineUserAsync(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
 
         public async Task<Result> NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
         {
-            bool isUserOnline = await IsUserOnline(notificationRecipientId);
-            if (!isUserOnline)
-                return Result.Success();
-
             string userName = await GetUserNameById(requestSenderId);
 
             NotificationBody notificationBody = new()
@@ -210,19 +204,13 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} reject your friend request",
                 Route = ScreenNames.RejectedRequestsScreen,
             };
-            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(notificationRecipientId);
-
-            await SendNotification(result, notificationBody);
+            await NotifyOnlineUserAsync(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
 
         public async Task<Result> NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
         {
-            bool isUserOnline = await IsUserOnline(notificationRecipientId);
-            if (!isUserOnline)
-                return Result.Success();
-
             string userName = await GetUserNameById(requestSenderId);
 
             NotificationBody notificationBody = new()
@@ -231,9 +219,7 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} block your friend request",
                 Route = ScreenNames.BlockedContactsScreen,
             };
-            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(notificationRecipientId);
-
-            await SendNotification(result, notificationBody);
+            await NotifyOnlineUserAsync(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
