@@ -86,7 +86,15 @@ namespace Services.NotificationDispatch.Service
             }
         }
 
-        private async Task GetUserDataAndSendNotification(int[] receiversIds, int skippedUser, NotificationBody notificationBody)
+        // TODO (Moved)
+        private async Task<bool> IsUserOnline(int userId)
+        {
+            string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
+            bool isUserOnline = await cache.GetAsync(connectionEstablishedCacheKey) != null;
+            return isUserOnline;
+        }
+
+        private async Task NotifyOnlineUsersAsync(int[] receiversIds, int skippedUser, NotificationBody notificationBody)
         {
             List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
             foreach (int userId in receiversIds)
@@ -110,14 +118,6 @@ namespace Services.NotificationDispatch.Service
             }
         }
 
-        // TODO (Moved)
-        private async Task<bool> IsUserOnline(int userId)
-        {
-            string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
-            bool isUserOnline = await cache.GetAsync(connectionEstablishedCacheKey) != null;
-            return isUserOnline;
-        }
-
         private async Task<string> GetUserNameById(int userId) =>
             await userRepo.GetUserNameById(userId) ?? "";
 
@@ -134,7 +134,7 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            await GetUserDataAndSendNotification(receiversIds, senderUserId, notificationBody);
+            await NotifyOnlineUsersAsync(receiversIds, senderUserId, notificationBody);
 
             return Result.Success();
         }
@@ -151,7 +151,7 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            await GetUserDataAndSendNotification(chatParticipantIds, chatCreatorId, notificationBody);
+            await NotifyOnlineUsersAsync(chatParticipantIds, chatCreatorId, notificationBody);
 
             return Result.Success();
         }
