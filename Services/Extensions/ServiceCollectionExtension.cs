@@ -160,7 +160,7 @@ public static class ServiceCollectionExtension
 	public static IServiceCollection AddServices(this IServiceCollection services) =>
 		services
 			.AddTransient<ITokenService, TokenService>()
-			.AddTransient<IAppleService, AppleService>()
+			.AddScoped<IAppleService, AppleService>()
 			.AddScoped<IAppleTokenService, AppleTokenService>()
 			.AddScoped<IUserRepository, UserRepository>()
 			.AddScoped<IFriendshipRepository, FriendshipRepository>()
