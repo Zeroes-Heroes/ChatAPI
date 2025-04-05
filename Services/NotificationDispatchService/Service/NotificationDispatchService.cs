@@ -94,12 +94,12 @@ namespace Services.NotificationDispatch.Service
             return isUserOnline;
         }
 
-        private async Task NotifyOnlineUsersAsync(int[] receiversIds, int skippedUser, NotificationBody notificationBody)
+        private async Task NotifyOnlineUsersAsync(int[] receiversIds, int chatOwenId, NotificationBody notificationBody)
         {
             List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
             foreach (int userId in receiversIds)
             {
-                if (userId != skippedUser)
+                if (userId != chatOwenId)
                 {
                     bool isUserOnline = await IsUserOnline(userId);
                     if (!isUserOnline) return;
