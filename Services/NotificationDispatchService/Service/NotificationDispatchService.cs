@@ -93,15 +93,15 @@ namespace Services.NotificationDispatch.Service
             return isUserOnline;
         }
 
-        private async Task NotifyOnlineUsersAsync(int[] receiversIds, int chatOwenId, NotificationBody notificationBody)
+        private async Task NotifyOfflineUsersAsync(int[] receiversIds, int chatOwenId, NotificationBody notificationBody)
         {
             List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
             foreach (int userId in receiversIds)
             {
-                if (userId != chatOwenId)
+                bool isUserOnline = await IsUserOnline(userId);
+                if (userId != chatOwenId && !isUserOnline)
                 {
-                    bool isUserOnline = await IsUserOnline(userId);
-                    if (!isUserOnline) return;
+                    // if (!isUserOnline) return;
 
                     var userDevices = results.Where(d => d.UserId == userId)
                         .Select(d => new DeviceDataResponse
@@ -116,10 +116,10 @@ namespace Services.NotificationDispatch.Service
             }
         }
 
-        private async Task NotifyOnlineUserAsync(int userId, NotificationBody notificationBody)
+        private async Task NotifyOfflineUserAsync(int userId, NotificationBody notificationBody)
         {
             bool isUserOnline = await IsUserOnline(userId);
-            if (!isUserOnline) return;
+            if (isUserOnline) return;
 
             List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
 
@@ -142,7 +142,7 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            await NotifyOnlineUsersAsync(receiversIds, senderUserId, notificationBody);
+            await NotifyOfflineUsersAsync(receiversIds, senderUserId, notificationBody);
 
             return Result.Success();
         }
@@ -159,7 +159,7 @@ namespace Services.NotificationDispatch.Service
                 ChatId = chatId,
             };
 
-            await NotifyOnlineUsersAsync(chatParticipantIds, chatCreatorId, notificationBody);
+            await NotifyOfflineUsersAsync(chatParticipantIds, chatCreatorId, notificationBody);
 
             return Result.Success();
         }
@@ -173,7 +173,7 @@ namespace Services.NotificationDispatch.Service
                 Route = ScreenNames.RequestsScreen,
             };
 
-            await NotifyOnlineUserAsync(userId, notificationBody);
+            await NotifyOfflineUserAsync(userId, notificationBody);
 
             return Result.Success();
         }
@@ -188,7 +188,7 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} accepted your friend request",
                 Route = ScreenNames.ContactsScreen,
             };
-            await NotifyOnlineUserAsync(notificationRecipientId, notificationBody);
+            await NotifyOfflineUserAsync(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
@@ -203,7 +203,7 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} reject your friend request",
                 Route = ScreenNames.RejectedRequestsScreen,
             };
-            await NotifyOnlineUserAsync(notificationRecipientId, notificationBody);
+            await NotifyOfflineUserAsync(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
@@ -218,7 +218,7 @@ namespace Services.NotificationDispatch.Service
                 Body = $"{userName} block your friend request",
                 Route = ScreenNames.BlockedContactsScreen,
             };
-            await NotifyOnlineUserAsync(notificationRecipientId, notificationBody);
+            await NotifyOfflineUserAsync(notificationRecipientId, notificationBody);
 
             return Result.Success();
         }
