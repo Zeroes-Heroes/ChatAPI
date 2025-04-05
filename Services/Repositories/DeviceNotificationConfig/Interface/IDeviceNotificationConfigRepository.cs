@@ -1,6 +1,5 @@
 using Database.Entities;
 using Services.NotificationDispatch.Models;
-using Services.NotificationDispatchService.Models;
 using Services.Repositories.Base.Interface;
 
 namespace Services.Repositories.DeviceNotificationConfig.Interface

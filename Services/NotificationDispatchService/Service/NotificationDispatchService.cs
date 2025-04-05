@@ -8,7 +8,6 @@ using Services.Repositories.User.Interface;
 using Services.Utilities;
 using Services.Utilities.Statics;
 using Services.Constants;
-using Services.NotificationDispatchService.Models;
 
 namespace Services.NotificationDispatch.Service
 {

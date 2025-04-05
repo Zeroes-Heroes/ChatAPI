@@ -2,7 +2,6 @@ using Database.Context;
 using Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Services.NotificationDispatch.Models;
-using Services.NotificationDispatchService.Models;
 using Services.Repositories.DeviceNotificationConfig.Interface;
 
 namespace Services.Repositories.DeviceNotificationConfig.Repository

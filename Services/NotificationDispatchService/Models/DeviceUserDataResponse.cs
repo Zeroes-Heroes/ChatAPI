@@ -1,6 +1,6 @@
 using Database.Enums;
 
-namespace Services.NotificationDispatchService.Models;
+namespace Services.NotificationDispatch.Models;
 
 public class DeviceUserDataResponse
 {
