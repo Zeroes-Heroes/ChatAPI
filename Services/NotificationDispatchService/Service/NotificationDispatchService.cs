@@ -89,6 +89,20 @@ namespace Services.NotificationDispatch.Service
             return isUserOnline;
         }
 
+        private async Task<int[]> FilterOfflineReceivers(int[] userIds, int skipUser)
+        {
+            List<int> offlineUsers = new List<int>();
+            foreach (int userId in userIds)
+            {
+                bool isUserOnline = await IsUserOnline(userId);
+                if (userId == skipUser || isUserOnline) continue;
+
+                offlineUsers.Add(userId);
+            }
+
+            return offlineUsers.ToArray();
+        }
+
         private async Task NotifyOfflineUserAsync(int userId, NotificationPayload notificationBody)
         {
             bool isUserOnline = await IsUserOnline(userId);
@@ -101,22 +115,20 @@ namespace Services.NotificationDispatch.Service
 
         private async Task NotifyOfflineUsersAsync(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
         {
-            List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
-            foreach (int userId in receiversIds)
-            {
-                bool isUserOnline = await IsUserOnline(userId);
-                if (userId == chatOwenId || isUserOnline) continue;
+            int[] offlineUsers = await FilterOfflineReceivers(receiversIds, chatOwenId);
 
-                var userDevices = results.Where(d => d.UserId == userId)
-                    .Select(d => new DeviceData
-                    {
-                        OS = d.OS,
-                        Token = d.Token,
-                        IsNotificationEnabled = d.IsNotificationEnabled,
-                    }).ToList();
+            if (offlineUsers.Length == 0) return;
 
-                await SendNotification(userDevices, notificationBody);
-            }
+            List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(offlineUsers);
+            var userDevices = results
+                .Select(d => new DeviceData
+                {
+                    OS = d.OS,
+                    Token = d.Token,
+                    IsNotificationEnabled = d.IsNotificationEnabled,
+                }).ToList();
+
+            await SendNotification(userDevices, notificationBody);
         }
 
         private async Task<string> GetUserNameById(int userId) =>
