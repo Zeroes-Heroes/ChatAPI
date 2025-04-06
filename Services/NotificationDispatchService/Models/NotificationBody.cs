@@ -1,6 +1,6 @@
 namespace Services.NotificationDispatch.Models;
 
-public class NotificationBody
+public class NotificationPayload
 {
     public string Title { get; set; }
     public string Body { get; set; }

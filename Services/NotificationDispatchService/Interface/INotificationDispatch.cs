@@ -4,11 +4,17 @@ namespace Services.NotificationDispatch.Interface
 {
     public interface INotificationDispatch
     {
-        Task<Result> NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId);
-        Task<Result> NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId);
-        Task<Result> NotificationForNewFriendshipRequest(int receiverUserId, string name);
-        Task<Result> NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId);
-        Task<Result> NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId);
-        Task<Result> NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId);
+        /// <summary>
+        /// // Send a notification to each user participating in the chat, excluding the user who sender the message
+        /// </summary>
+        Task NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId);
+        /// <summary>
+        /// Send a notification to each user participating in the chat, excluding the user who created the chat
+        /// </summary>
+        Task NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId);
+        Task NotificationForNewFriendshipRequest(int receiverUserId, string name);
+        Task NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId);
+        Task NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId);
+        Task NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId);
     }
 }

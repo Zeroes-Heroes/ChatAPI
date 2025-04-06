@@ -10,7 +10,7 @@ namespace Services.Repositories.DeviceNotificationConfig.Interface
         Task<bool> UpdateDeviceData(int userId, string deviceId, bool isNotificationEnabled);
         Task<bool> DoesTokenExistForUser(string deviceToken, int userId);
         Task<bool> IsUserDeviceNotificationEnabled(string deviceId, int userId);
-        Task<List<DeviceDataResponse>> FetchEnabledUserDeviceDataById (int userId);
+        Task<List<DeviceData>> FetchEnabledUserDeviceDataById (int userId);
         Task<List<DeviceUserDataResponse>> FetchEnabledUsersDevicesDataByIds (int[] userId);
     }
 }

@@ -5,15 +5,15 @@ using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Models;
 using Services.Repositories.DeviceNotificationConfig.Interface;
 using Services.Repositories.User.Interface;
-using Services.Utilities;
 using Services.Utilities.Statics;
 using Services.Constants;
 
 namespace Services.NotificationDispatch.Service
 {
+    /// <inheritdoc/>
     public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IDistributedCache cache) : INotificationDispatch
     {
-        private async Task<Result> SendPushNotificationToApple(string deviceToken, NotificationBody notificationInfo)
+        private async Task SendPushNotificationToApple(string deviceToken, NotificationPayload notificationInfo)
         {
             AppleNotificationPayload payload = new()
             {
@@ -29,16 +29,14 @@ namespace Services.NotificationDispatch.Service
                     // "chatId" is provided only when the notification is for a chat; 
                     // in other cases, only the name of the screen to which the user should be navigated
                     // upon opening the notification is provided.
-                    ChatId = notificationInfo?.ChatId?.ToString() ?? string.Empty,
+                    ChatId = notificationInfo.ChatId?.ToString() ?? string.Empty,
                 }
             };
 
-            await appleService.SendAsyncPushNotification(deviceToken, payload);
-
-            return Result.Success();
+            await appleService.SendPushNotification(deviceToken, payload);
         }
 
-        private async Task<Result> SendPushNotificationToAndroid(string deviceToken, NotificationBody notificationInfo)
+        private async Task SendPushNotificationToAndroid(string deviceToken, NotificationPayload notificationInfo)
         {
             var message = new Message()
             {
@@ -54,19 +52,17 @@ namespace Services.NotificationDispatch.Service
                     // "chatId" is provided only when the notification is for a chat; 
                     // in other cases, only the name of the screen to which the user should be navigated
                     // upon opening the notification is provided.
-                    {"chatId", notificationInfo?.ChatId.ToString()}
+                    {"chatId", notificationInfo.ChatId.ToString() ?? string.Empty}
                 }
             };
 
             await FirebaseMessaging.DefaultInstance.SendAsync(message);
-
-            return Result.Success();
         }
 
         //  IMPORTANT: There is a possibility that, with the change in the ability to manage which notifications
         //  to receive and which not, the method may start receiving an array of data for each device to which it
         //  should send a notification as the first parameter.
-        private async Task SendNotification(List<DeviceDataResponse> deviceDataList, NotificationBody notificationBody)
+        private async Task SendNotification(List<DeviceData> deviceDataList, NotificationPayload notificationBody)
         {
             foreach (var deviceData in deviceDataList)
             {
@@ -93,35 +89,32 @@ namespace Services.NotificationDispatch.Service
             return isUserOnline;
         }
 
-        private async Task NotifyOfflineUsersAsync(int[] receiversIds, int chatOwenId, NotificationBody notificationBody)
+        private async Task NotifyOfflineUsersAsync(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
         {
             List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
             foreach (int userId in receiversIds)
             {
                 bool isUserOnline = await IsUserOnline(userId);
-                if (userId != chatOwenId && !isUserOnline)
-                {
-                    // if (!isUserOnline) return;
+                if (userId == chatOwenId || isUserOnline) continue;
 
-                    var userDevices = results.Where(d => d.UserId == userId)
-                        .Select(d => new DeviceDataResponse
-                        {
-                            OS = d.OS,
-                            Token = d.Token,
-                            IsNotificationEnabled = d.IsNotificationEnabled,
-                        }).ToList();
+                var userDevices = results.Where(d => d.UserId == userId)
+                    .Select(d => new DeviceData
+                    {
+                        OS = d.OS,
+                        Token = d.Token,
+                        IsNotificationEnabled = d.IsNotificationEnabled,
+                    }).ToList();
 
-                    await SendNotification(userDevices, notificationBody);
-                }
+                await SendNotification(userDevices, notificationBody);
             }
         }
 
-        private async Task NotifyOfflineUserAsync(int userId, NotificationBody notificationBody)
+        private async Task NotifyOfflineUserAsync(int userId, NotificationPayload notificationBody)
         {
             bool isUserOnline = await IsUserOnline(userId);
             if (isUserOnline) return;
 
-            List<DeviceDataResponse> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
+            List<DeviceData> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
 
             await SendNotification(result, notificationBody);
         }
@@ -130,97 +123,73 @@ namespace Services.NotificationDispatch.Service
             await userRepo.GetUserNameById(userId) ?? "";
 
 
-        public async Task<Result> NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
+        private static NotificationPayload ConstructNotificationPayload(string title, string body, string route)
+        {
+            return new()
+            {
+                Title = title,
+                Body = body,
+                Route = route,
+            };
+        }
+
+        private static NotificationPayload ConstructChatNotificationPayload(string title, string body, string route, int chatId)
+        {
+            NotificationPayload newPayload = ConstructNotificationPayload(title, body, route);
+            newPayload.ChatId = chatId;
+            return newPayload;
+        }
+
+        public async Task NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
         {
             string userName = await GetUserNameById(senderUserId);
 
-            NotificationBody notificationBody = new()
-            {
-                Title = $"{userName} send you a message",
-                Body = message,
-                Route = ScreenNames.ChatScreen,
-                ChatId = chatId,
-            };
+            NotificationPayload notificationPayload = ConstructChatNotificationPayload($"{userName} send you a message", message, ScreenNames.ChatScreen, chatId);
 
-            await NotifyOfflineUsersAsync(receiversIds, senderUserId, notificationBody);
-
-            return Result.Success();
+            await NotifyOfflineUsersAsync(receiversIds, senderUserId, notificationPayload);
         }
 
-        public async Task<Result> NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
+        public async Task NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
         {
             string userName = await GetUserNameById(chatCreatorId);
 
-            NotificationBody notificationBody = new()
-            {
-                Title = "New Created chat",
-                Body = $"{userName} created chat with you.",
-                Route = ScreenNames.ChatScreen,
-                ChatId = chatId,
-            };
+            NotificationPayload notificationPayload = ConstructChatNotificationPayload("New Created chat", $"{userName} created chat with you.", ScreenNames.ChatScreen, chatId);
 
-            await NotifyOfflineUsersAsync(chatParticipantIds, chatCreatorId, notificationBody);
-
-            return Result.Success();
+            await NotifyOfflineUsersAsync(chatParticipantIds, chatCreatorId, notificationPayload);
         }
 
-        public async Task<Result> NotificationForNewFriendshipRequest(int userId, string name)
+        public async Task NotificationForNewFriendshipRequest(int userId, string name)
         {
-            NotificationBody notificationBody = new()
-            {
-                Title = "New Request",
-                Body = $"{name} you send new friendship request",
-                Route = ScreenNames.RequestsScreen,
-            };
+            NotificationPayload notificationPayload = ConstructNotificationPayload("New Request", $"{name} you send new friendship request", ScreenNames.RequestsScreen);
 
-            await NotifyOfflineUserAsync(userId, notificationBody);
-
-            return Result.Success();
+            await NotifyOfflineUserAsync(userId, notificationPayload);
         }
 
-        public async Task<Result> NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId)
+        public async Task NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId)
         {
             string userName = await GetUserNameById(requestSenderId);
 
-            NotificationBody notificationBody = new()
-            {
-                Title = "Accepted request",
-                Body = $"{userName} accepted your friend request",
-                Route = ScreenNames.ContactsScreen,
-            };
-            await NotifyOfflineUserAsync(notificationRecipientId, notificationBody);
+            NotificationPayload notificationPayload = ConstructNotificationPayload("Accepted request", $"{userName} accepted your friend request", ScreenNames.ContactsScreen);
 
-            return Result.Success();
+            await NotifyOfflineUserAsync(notificationRecipientId, notificationPayload);
         }
 
-        public async Task<Result> NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
+        public async Task NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
         {
             string userName = await GetUserNameById(requestSenderId);
 
-            NotificationBody notificationBody = new()
-            {
-                Title = "Rejected request",
-                Body = $"{userName} reject your friend request",
-                Route = ScreenNames.RejectedRequestsScreen,
-            };
-            await NotifyOfflineUserAsync(notificationRecipientId, notificationBody);
+            NotificationPayload notificationPayload = ConstructNotificationPayload("Rejected request", $"{userName} reject your friend request", ScreenNames.RejectedRequestsScreen);
 
-            return Result.Success();
+            await NotifyOfflineUserAsync(notificationRecipientId, notificationPayload);
         }
 
-        public async Task<Result> NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
+        public async Task NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
         {
             string userName = await GetUserNameById(requestSenderId);
 
-            NotificationBody notificationBody = new()
-            {
-                Title = "Blocker request",
-                Body = $"{userName} block your friend request",
-                Route = ScreenNames.BlockedContactsScreen,
-            };
-            await NotifyOfflineUserAsync(notificationRecipientId, notificationBody);
+            NotificationPayload notificationPayload = ConstructNotificationPayload("Blocker request", $"{userName} block your friend request", ScreenNames.BlockedContactsScreen);
 
-            return Result.Success();
+            await NotifyOfflineUserAsync(notificationRecipientId, notificationPayload);
         }
     }
 }

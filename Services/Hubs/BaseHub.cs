@@ -189,8 +189,14 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			else
 				continue;
 
-			// Send a notification to each user participating in the chat, excluding the user who sender the message
-			notificationDispatch.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
+			try
+			{
+				await notificationDispatch.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
+			}
+			catch (Exception ex)
+			{
+				Console.Write(ex);
+			}
 
 			await Clients
 				.GetUserById(senderId)

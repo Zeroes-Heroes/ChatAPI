@@ -32,9 +32,15 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 
 		ChatCreatedEvent chatCreatedEvent = new(chatEntity.Id, chatEntity.Name, chatEntity.Users.Select(u => u.Id).ToArray());
 		SendEventChatCreated(chatCreatedEvent);
-		
-		// Send a notification to each user participating in the chat, excluding the user who created the chat
-		notificationDispatch.NotificationForNewChat(createChatRequest.UserIds, chatCreatorId, chatEntity.Id);
+
+		try
+		{
+			await notificationDispatch.NotificationForNewChat(createChatRequest.UserIds, chatCreatorId, chatEntity.Id);
+		}
+		catch (Exception ex)
+		{
+			Console.Write(ex);
+		}
 
 		return Result.Success();
 	}

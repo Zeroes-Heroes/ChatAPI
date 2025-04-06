@@ -36,10 +36,10 @@ namespace Services.Repositories.DeviceNotificationConfig.Repository
                 .SingleOrDefaultAsync();
 
 
-        public async Task<List<DeviceDataResponse>> FetchEnabledUserDeviceDataById(int userId)
+        public async Task<List<DeviceData>> FetchEnabledUserDeviceDataById(int userId)
         {
             return await dbContext.DeviceNotificationsConfig.Where(r => r.UserId == userId && r.IsNotificationEnabled == true)
-                .Select(pushNotification => new DeviceDataResponse
+                .Select(pushNotification => new DeviceData
                 {
                     OS = pushNotification.OperatingSystem,
                     Token = pushNotification.Token,

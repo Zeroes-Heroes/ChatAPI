@@ -9,6 +9,10 @@ public class AppSettings
 	public string TwillioAuthToken { get; set; }
 	public string TwillioAccountSid { get; set; }
 	public string TwillioVerificationSid { get; set; }
+}
+
+public class NotificationSettings
+{
 	public string ApplePrivateKeyPath { get; set; }
 	public string AppleKeyId { get; set; }
 	public string AppleTeamId { get; set; }

@@ -12,13 +12,13 @@ using Services.Utilities.Statics;
 
 namespace Services.Token.Service
 {
-    public class AppleTokenService(IOptions<AppSettings> appSettings, IDistributedCache cache) : IAppleTokenService
+    public class AppleTokenService(IOptions<NotificationSettings> notificationSettings, IDistributedCache cache) : IAppleTokenService
     {
-        private readonly AppSettings appSettings = appSettings.Value;
+        private readonly NotificationSettings notificationSettings = notificationSettings.Value;
 
         private Task<string> GeneratePushNotificationToken()
         {
-            string privateKeyText = File.ReadAllText(appSettings.ApplePrivateKeyPath, Encoding.UTF8);
+            string privateKeyText = File.ReadAllText(notificationSettings.ApplePrivateKeyPath, Encoding.UTF8);
 
             using ECDsa ecdsa = GetEcdsaParametersFromPrivateKey(privateKeyText);
 
@@ -27,13 +27,13 @@ namespace Services.Token.Service
             var header = new JwtHeader
         {
             { "alg", SecurityAlgorithms.EcdsaSha256 },
-            { "kid", appSettings.AppleKeyId},
+            { "kid", notificationSettings.AppleKeyId},
         };
 
             var payload = new JwtPayload
         {
             { "iat", iat },
-            { "iss", appSettings.AppleTeamId },
+            { "iss", notificationSettings.AppleTeamId },
         };
 
             string headerJson = JsonSerializer.Serialize(header);

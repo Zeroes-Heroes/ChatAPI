@@ -3,26 +3,25 @@ using Microsoft.Extensions.Options;
 using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Models;
 using Services.Token.Interface;
-using Services.Utilities;
 using Services.Utilities.Models;
 
 namespace Services.NotificationDispatch.Service
 {
-    public class AppleService(IAppleTokenService appleTokenService, IOptions<AppSettings> appSettings) : IAppleService
+    public class AppleService(IAppleTokenService appleTokenService, IOptions<NotificationSettings> notificationSettings) : IAppleService
     {
-        private readonly AppSettings appSettings = appSettings.Value;
+        private readonly NotificationSettings notificationSettings = notificationSettings.Value;
 
-        public async Task<Result> SendAsyncPushNotification(string deviceToken, AppleNotificationPayload payload)
+        public async Task SendPushNotification(string deviceToken, AppleNotificationPayload payload)
         {
             HttpClient httpClient = new HttpClient();
 
             string token = await appleTokenService.GetPushNotificationToken();
             httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("bearer", token);
 
-            string bundleId = appSettings.AppleBundleId;
+            string bundleId = notificationSettings.AppleBundleId;
             httpClient.DefaultRequestHeaders.Add("apns-topic", bundleId);
 
-            string apnUrl = appSettings.ApplePushNotificationUrl + deviceToken;
+            string apnUrl = notificationSettings.ApplePushNotificationUrl + deviceToken;
             var jsonPayload = System.Text.Json.JsonSerializer.Serialize(payload);
 
             var request = new HttpRequestMessage(HttpMethod.Post, apnUrl)
@@ -33,15 +32,6 @@ namespace Services.NotificationDispatch.Service
 
             HttpResponseMessage response = await httpClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            if (response.IsSuccessStatusCode)
-            {
-                return Result.Success();
-            }
-            else
-            {
-                var responseBody = await response.Content.ReadAsStringAsync();
-                return Result.Failure($"Failed to send notification: {response.StatusCode}, {responseBody}");
-            }
         }
     }
 }

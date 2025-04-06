@@ -5,6 +5,6 @@ namespace Services.NotificationDispatch.Interface
 {
     public interface IAppleService
     {
-        Task<Result> SendAsyncPushNotification(string deviceToken, AppleNotificationPayload payload);
+        Task SendPushNotification(string deviceToken, AppleNotificationPayload payload);
     }
 }
