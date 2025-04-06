@@ -103,7 +103,7 @@ namespace Services.NotificationDispatch.Service
             return offlineUsers.ToArray();
         }
 
-        private async Task NotifyOfflineUserAsync(int userId, NotificationPayload notificationBody)
+        private async Task NotifyOfflineUser(int userId, NotificationPayload notificationBody)
         {
             bool isUserOnline = await IsUserOnline(userId);
             if (isUserOnline) return;
@@ -113,20 +113,13 @@ namespace Services.NotificationDispatch.Service
             await SendNotification(result, notificationBody);
         }
 
-        private async Task NotifyOfflineUsersAsync(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
+        private async Task NotifyOfflineUsers(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
         {
             int[] offlineUsers = await FilterOfflineReceivers(receiversIds, chatOwenId);
 
             if (offlineUsers.Length == 0) return;
 
-            List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(offlineUsers);
-            var userDevices = results
-                .Select(d => new DeviceData
-                {
-                    OS = d.OS,
-                    Token = d.Token,
-                    IsNotificationEnabled = d.IsNotificationEnabled,
-                }).ToList();
+            List<DeviceData> userDevices = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(offlineUsers);
 
             await SendNotification(userDevices, notificationBody);
         }
@@ -158,7 +151,7 @@ namespace Services.NotificationDispatch.Service
 
             NotificationPayload notificationPayload = ConstructChatNotificationPayload($"{userName} send you a message", message, ScreenNames.ChatScreen, chatId);
 
-            await NotifyOfflineUsersAsync(receiversIds, senderUserId, notificationPayload);
+            await NotifyOfflineUsers(receiversIds, senderUserId, notificationPayload);
         }
 
         public async Task NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
@@ -167,14 +160,14 @@ namespace Services.NotificationDispatch.Service
 
             NotificationPayload notificationPayload = ConstructChatNotificationPayload("New Created chat", $"{userName} created chat with you.", ScreenNames.ChatScreen, chatId);
 
-            await NotifyOfflineUsersAsync(chatParticipantIds, chatCreatorId, notificationPayload);
+            await NotifyOfflineUsers(chatParticipantIds, chatCreatorId, notificationPayload);
         }
 
         public async Task NotificationForNewFriendshipRequest(int userId, string name)
         {
             NotificationPayload notificationPayload = ConstructNotificationPayload("New Request", $"{name} you send new friendship request", ScreenNames.RequestsScreen);
 
-            await NotifyOfflineUserAsync(userId, notificationPayload);
+            await NotifyOfflineUser(userId, notificationPayload);
         }
 
         public async Task NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId)
@@ -183,7 +176,7 @@ namespace Services.NotificationDispatch.Service
 
             NotificationPayload notificationPayload = ConstructNotificationPayload("Accepted request", $"{userName} accepted your friend request", ScreenNames.ContactsScreen);
 
-            await NotifyOfflineUserAsync(notificationRecipientId, notificationPayload);
+            await NotifyOfflineUser(notificationRecipientId, notificationPayload);
         }
 
         public async Task NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
@@ -192,7 +185,7 @@ namespace Services.NotificationDispatch.Service
 
             NotificationPayload notificationPayload = ConstructNotificationPayload("Rejected request", $"{userName} reject your friend request", ScreenNames.RejectedRequestsScreen);
 
-            await NotifyOfflineUserAsync(notificationRecipientId, notificationPayload);
+            await NotifyOfflineUser(notificationRecipientId, notificationPayload);
         }
 
         public async Task NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
@@ -201,7 +194,7 @@ namespace Services.NotificationDispatch.Service
 
             NotificationPayload notificationPayload = ConstructNotificationPayload("Blocker request", $"{userName} block your friend request", ScreenNames.BlockedContactsScreen);
 
-            await NotifyOfflineUserAsync(notificationRecipientId, notificationPayload);
+            await NotifyOfflineUser(notificationRecipientId, notificationPayload);
         }
     }
 }
