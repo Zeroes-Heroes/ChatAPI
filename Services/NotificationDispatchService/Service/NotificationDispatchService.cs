@@ -89,6 +89,16 @@ namespace Services.NotificationDispatch.Service
             return isUserOnline;
         }
 
+        private async Task NotifyOfflineUserAsync(int userId, NotificationPayload notificationBody)
+        {
+            bool isUserOnline = await IsUserOnline(userId);
+            if (isUserOnline) return;
+
+            List<DeviceData> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
+
+            await SendNotification(result, notificationBody);
+        }
+
         private async Task NotifyOfflineUsersAsync(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
         {
             List<DeviceUserDataResponse> results = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(receiversIds);
@@ -107,16 +117,6 @@ namespace Services.NotificationDispatch.Service
 
                 await SendNotification(userDevices, notificationBody);
             }
-        }
-
-        private async Task NotifyOfflineUserAsync(int userId, NotificationPayload notificationBody)
-        {
-            bool isUserOnline = await IsUserOnline(userId);
-            if (isUserOnline) return;
-
-            List<DeviceData> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
-
-            await SendNotification(result, notificationBody);
         }
 
         private async Task<string> GetUserNameById(int userId) =>
