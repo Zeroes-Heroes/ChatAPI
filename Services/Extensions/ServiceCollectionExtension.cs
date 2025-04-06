@@ -46,11 +46,9 @@ namespace Services.Extensions;
 public static class ServiceCollectionExtension
 {
 	public static IServiceCollection ConfigureAppSettings(this IServiceCollection services, IConfiguration config)
-	{
-		services.Configure<AppSettings>(config.GetSection("AppSettings"));
-		services.Configure<NotificationSettings>(config.GetSection("NotificationSettings"));
-		return services;
-	}
+		=> services
+			.Configure<AppSettings>(config)
+			.Configure<NotificationSettings>(config);
 
 	/// <summary>
 	/// Adds and configures the swagger.
