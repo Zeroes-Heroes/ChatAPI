@@ -4,7 +4,7 @@ using Services.DeviceNotificationConfig.Interface;
 using Services.DeviceNotificationConfig.Models;
 using Services.Extensions;
 
-namespace Turbo.Controllers.PushNotification.Controller
+namespace Turbo.Controllers.DeviceNotificationConfig.Controller
 {
     [ApiController]
     [Route("[controller]")]

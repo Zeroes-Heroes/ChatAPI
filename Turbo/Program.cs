@@ -37,6 +37,7 @@ public class Program
 			.AddAuthenticationConfigured(builder.Configuration)
 			.AddAuthorization()
 			.InitializeTwilio(builder.Configuration)
+			.InitializeFirebase(builder.Configuration)
 			.AddServices()
 			.AddEndpointsApiExplorer()
 			.AddControllers();

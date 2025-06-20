@@ -5,6 +5,7 @@ using Services.Friendship.Interface;
 using Services.Friendship.Models;
 using Services.Hubs;
 using Services.Hubs.Models;
+using Services.NotificationDispatch.Interface;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities;
@@ -13,7 +14,7 @@ using static Services.Utilities.Statics.LiveEvents;
 
 namespace Services.Friendship.Service;
 
-public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext) : IFriendshipService
+public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatcher) : IFriendshipService
 {
 	private readonly IHubContext<BaseHub> hubContext = hubContext;
 
@@ -52,6 +53,15 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 				NewFriendRequest,
 				new FriendshipDTO(senderUserId, senderUser.Name, senderUser.Phone, (int)FriendshipStatus.Pending, IsInitiator: false));
 
+		try
+		{
+			await notificationDispatcher.NotificationForNewFriendshipRequest(targetUser.Id, senderUser.Name);
+		}
+		catch (Exception ex)
+		{
+			Console.Write(ex);
+		}
+
 		return Result<FriendshipDTO>.Success(
 			new FriendshipDTO(targetUser.Id, targetUser.Name, targetUser.Phone, (int)FriendshipStatus.Pending, IsInitiator: true));
 	}
@@ -64,6 +74,29 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 	/// <param name="isInitiator">Whether or not to filter only these friendships, where the given user id is the sender of the friend request.</param>
 	public Task<IEnumerable<FriendshipDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null) =>
 		friendRepo.GetUserFriendships(userId, status, isInitiator);
+
+	private async Task NotifyFriendshipStatusChange(int senderUserId, int targetUserId, FriendshipStatus newStatus)
+	{
+		try
+		{
+			switch (newStatus)
+			{
+				case FriendshipStatus.Accepted:
+					await notificationDispatcher.NotificationAcceptFriendship(senderUserId, targetUserId);
+					break;
+				case FriendshipStatus.Rejected:
+					await notificationDispatcher.NotificationForRejectedFriendship(senderUserId, targetUserId);
+					break;
+				case FriendshipStatus.Blocked:
+					await notificationDispatcher.NotificationForBlockedFriendship(senderUserId, targetUserId);
+					break;
+			}
+		}
+		catch (Exception ex)
+		{
+			Console.Write(ex);
+		}
+	}
 
 	/// <summary>
 	/// Updates the status of a friendship.
@@ -89,6 +122,8 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 
 		friendship.Status = newStatus;
 		await friendRepo.SaveChangesAsync();
+
+		await NotifyFriendshipStatusChange(senderUserId, targetUserId, newStatus);
 
 		await hubContext.Clients.GetUserById(senderUserId).SendAsync(FriendRequestAnswer, new FriendRequestModelAnswerModel(targetUserId, (int)newStatus));
 
