@@ -145,6 +145,7 @@ namespace Services.NotificationDispatch.Service
             return newPayload;
         }
 
+        // TODO Nikolay: 20.06.2025 --> Refactoring: These hardcoded strings should be moved out
         public async Task NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
         {
             string userName = await GetUserNameById(senderUserId);
