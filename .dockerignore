@@ -28,7 +28,3 @@ README.md
 !.git/config
 !.git/packed-refs
 !.git/refs/heads/**
-
-# PushNotification certificate (credentials)
-AuthKey_*
-chatappclient-*
