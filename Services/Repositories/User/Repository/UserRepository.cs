@@ -84,9 +84,9 @@ public class UserRepository(AppDbContext dbContext) : IUserRepository
 			.Select(u => u.Name)
 			.SingleOrDefaultAsync();
 
-	public Task<int> GetUserDeviceIdByDeviceId(string deviceId) =>
+	public Task<int> GetUserDeviceIdByDeviceId(string deviceId, int userId) =>
 		dbContext.UserDevices
-			.Where(p => p.DeviceId == deviceId)
+			.Where(p => p.DeviceId == deviceId && p.UserId == userId)
 			.Select(p => p.Id)
 			.SingleOrDefaultAsync();
 }

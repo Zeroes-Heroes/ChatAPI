@@ -24,7 +24,7 @@ namespace Services.DeviceNotificationConfig.Service
                 return Result.Failure("Something went wrong with your device token");
             };
 
-            int userDeviceId = await userRepo.GetUserDeviceIdByDeviceId(deviceId);
+            int userDeviceId = await userRepo.GetUserDeviceIdByDeviceId(deviceId, userId);
 
             DeviceNotificationConfigEntity notificationEntity = new(operatingSystemType, deviceData.Token, IsNotificationEnabled: true, userId, userDeviceId);
 
