@@ -1,4 +1,4 @@
-﻿using Database.Context;
+using Database.Context;
 using Database.Entities;
 using Database.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Services.Extensions;
 using Services.Hubs.Models;
 using Services.NotificationDispatch.Interface;
@@ -122,9 +123,18 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		int userId = user.Id();
 		string connectionEstablishedKey = string.Format(CacheKeys.ConnectionEstablished, userId);
-		string chatEnteredKey = string.Format(CacheKeys.ChatEntered, userId);
+		string userCurrentChatIdKey = string.Format(CacheKeys.UserCurrentChatId, userId);
+
 		await cache.RemoveAsync(connectionEstablishedKey);
-		await cache.RemoveAsync(chatEnteredKey);
+
+		byte[]? currentChatIdBytes = await cache.GetAsync(userCurrentChatIdKey);
+		if (currentChatIdBytes != null)
+		{
+			int currentChatId = System.Text.Json.JsonSerializer.Deserialize<int>(currentChatIdBytes);
+			string chatEnteredKey = string.Format(CacheKeys.ChatEntered, userId, currentChatId);
+			await cache.RemoveAsync(chatEnteredKey);
+			await cache.RemoveAsync(userCurrentChatIdKey);
+		}
 
 		await base.OnDisconnectedAsync(exception);
 	}
@@ -137,6 +147,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
 		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<INotificationDispatch>();
+		ILogger<BaseHub> logger = serviceProvider.GetRequiredService<ILogger<BaseHub>>();
 
 		ClaimsPrincipal? user = Context.User;
 
@@ -189,18 +200,18 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			else
 				continue;
 
-			try
-			{
-				await notificationDispatch.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
-			}
-			catch (Exception ex)
-			{
-				Console.Write(ex);
-			}
-
 			await Clients
 				.GetUserById(senderId)
 				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+		}
+
+		try
+		{
+			await notificationDispatch.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Failed to dispatch push notifications for chat {ChatId}", chatId);
 		}
 
 		dbContext.MessagesStatus.AddRange(messageStatusEntities);
@@ -224,7 +235,9 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		int receiverId = user.Id();
 		string cacheKey = string.Format(CacheKeys.ChatEntered, receiverId, chatId);
+		string userCurrentChatIdKey = string.Format(CacheKeys.UserCurrentChatId, receiverId);
 		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
+		await cache.SetAsync(userCurrentChatIdKey, chatId, DateTime.UtcNow.AddDays(1));
 
 		MessageEntity[] unSeenMessages =
 			await dbContext.Messages
@@ -279,8 +292,11 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		if (user == null)
 			return;
 
-		string cacheKey = string.Format(CacheKeys.ChatEntered, user.Id(), chatExitedEvent.ChatId);
+		int userId = user.Id();
+		string cacheKey = string.Format(CacheKeys.ChatEntered, userId, chatExitedEvent.ChatId);
+		string userCurrentChatIdKey = string.Format(CacheKeys.UserCurrentChatId, userId);
 		await cache.RemoveAsync(cacheKey);
+		await cache.RemoveAsync(userCurrentChatIdKey);
 	}
 
 	[HubMethodName("message-status-update-received")]

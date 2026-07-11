@@ -1,6 +1,7 @@
 using Database.Enums;
 using FirebaseAdmin.Messaging;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Models;
 using Services.Repositories.DeviceNotificationConfig.Interface;
@@ -11,13 +12,13 @@ using Services.Constants;
 namespace Services.NotificationDispatch.Service
 {
     /// <inheritdoc/>
-    public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IDistributedCache cache) : INotificationDispatch
+    public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IDistributedCache cache, ILogger<NotificationDispatchService> logger) : INotificationDispatch
     {
         private async Task SendPushNotificationToApple(string deviceToken, NotificationPayload notificationInfo)
         {
             AppleNotificationPayload payload = new()
             {
-                aps = new ApplePushNotification
+                Aps = new ApplePushNotification
                 {
                     Alert = new Alert
                     {
@@ -25,12 +26,12 @@ namespace Services.NotificationDispatch.Service
                         Body = notificationInfo.Body,
                     },
                     Sound = "default",
-                    Route = notificationInfo.Route,
-                    // "chatId" is provided only when the notification is for a chat; 
-                    // in other cases, only the name of the screen to which the user should be navigated
-                    // upon opening the notification is provided.
-                    ChatId = notificationInfo.ChatId?.ToString() ?? string.Empty,
-                }
+                },
+                Route = notificationInfo.Route,
+                // "chatId" is provided only when the notification is for a chat;
+                // in other cases, only the name of the screen to which the user should be navigated
+                // upon opening the notification is provided.
+                ChatId = notificationInfo.ChatId?.ToString() ?? string.Empty,
             };
 
             await appleService.SendPushNotification(deviceToken, payload);
@@ -38,6 +39,13 @@ namespace Services.NotificationDispatch.Service
 
         private async Task SendPushNotificationToAndroid(string deviceToken, NotificationPayload notificationInfo)
         {
+            var messaging = FirebaseMessaging.DefaultInstance;
+            if (messaging == null)
+            {
+                logger.LogError("Firebase is not initialized. Cannot send Android push notification to device: {DeviceToken}", deviceToken);
+                return;
+            }
+
             var message = new Message()
             {
                 Notification = new Notification
@@ -49,14 +57,16 @@ namespace Services.NotificationDispatch.Service
                 Data = new Dictionary<string, string>()
                 {
                     {"route", notificationInfo.Route},
-                    // "chatId" is provided only when the notification is for a chat; 
+                    // "chatId" is provided only when the notification is for a chat;
                     // in other cases, only the name of the screen to which the user should be navigated
                     // upon opening the notification is provided.
-                    {"chatId", notificationInfo.ChatId.ToString() ?? string.Empty}
+                    {"chatId", notificationInfo.ChatId?.ToString() ?? string.Empty}
                 }
             };
 
-            await FirebaseMessaging.DefaultInstance.SendAsync(message);
+            logger.LogDebug("Sending Android push notification to device: {DeviceToken}", deviceToken);
+            string messageId = await messaging.SendAsync(message);
+            logger.LogInformation("Android push notification sent successfully. MessageId: {MessageId}", messageId);
         }
 
         //  IMPORTANT: There is a possibility that, with the change in the ability to manage which notifications
@@ -67,16 +77,23 @@ namespace Services.NotificationDispatch.Service
             foreach (var deviceData in deviceDataList)
             {
                 string deviceToken = deviceData.Token;
-                if (deviceData.OS == OperatingSystemType.ios)
+                try
                 {
-                    await SendPushNotificationToApple(deviceToken, notificationBody);
-                    continue;
-                }
+                    if (deviceData.OS == OperatingSystemType.ios)
+                    {
+                        await SendPushNotificationToApple(deviceToken, notificationBody);
+                        continue;
+                    }
 
-                if (deviceData.OS == OperatingSystemType.android)
+                    if (deviceData.OS == OperatingSystemType.android)
+                    {
+                        await SendPushNotificationToAndroid(deviceToken, notificationBody);
+                        continue;
+                    }
+                }
+                catch (Exception ex)
                 {
-                    await SendPushNotificationToAndroid(deviceToken, notificationBody);
-                    continue;
+                    logger.LogError(ex, "Failed to send push notification to device {DeviceToken} (OS: {OS})", deviceToken, deviceData.OS);
                 }
             }
         }
@@ -105,8 +122,7 @@ namespace Services.NotificationDispatch.Service
 
         private async Task NotifyOfflineUser(int userId, NotificationPayload notificationBody)
         {
-            bool isUserOnline = await IsUserOnline(userId);
-            if (isUserOnline) return;
+            if (await IsUserOnline(userId)) return;
 
             List<DeviceData> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
 
@@ -115,11 +131,11 @@ namespace Services.NotificationDispatch.Service
 
         private async Task NotifyOfflineUsers(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
         {
-            int[] offlineUsers = await FilterOfflineReceivers(receiversIds, chatOwenId);
+            int[] offlineReceivers = await FilterOfflineReceivers(receiversIds, chatOwenId);
 
-            if (offlineUsers.Length == 0) return;
+            if (offlineReceivers.Length == 0) return;
 
-            List<DeviceData> userDevices = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(offlineUsers);
+            List<DeviceData> userDevices = await deviceNotificationConfigRepo.FetchEnabledUsersDevicesDataByIds(offlineReceivers);
 
             await SendNotification(userDevices, notificationBody);
         }

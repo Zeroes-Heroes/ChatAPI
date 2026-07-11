@@ -194,19 +194,33 @@ public static class ServiceCollectionExtension
 
 	public static IServiceCollection InitializeFirebase(this IServiceCollection services, IConfiguration configuration)
 	{
-		// TODO: Review the try {} catch block to either improve its error handling logic or remove it if unnecessary
+		string? androidPrivateKeyPath = configuration["AndroidPrivateKeyPath"];
+
+		if (string.IsNullOrWhiteSpace(androidPrivateKeyPath))
+		{
+			Console.Error.WriteLine("[WARNING] AndroidPrivateKeyPath is not configured. Android push notifications will be disabled.");
+			return services;
+		}
+
+		if (!File.Exists(androidPrivateKeyPath))
+		{
+			Console.Error.WriteLine($"[WARNING] Firebase credentials file not found at path: '{androidPrivateKeyPath}'. Android push notifications will be disabled.");
+			return services;
+		}
+
 		try
 		{
-			string AndroidPrivateKeyPath = configuration["AndroidPrivateKeyPath"];
 			FirebaseApp.Create(new AppOptions()
 			{
-				Credential = GoogleCredential.FromFile(AndroidPrivateKeyPath)
+				Credential = GoogleCredential.FromFile(androidPrivateKeyPath)
 			});
 		}
 		catch (Exception ex)
 		{
-			Console.WriteLine($"Firebase initialization error: {ex.Message}");
+			Console.Error.WriteLine($"[ERROR] Firebase initialization failed: {ex.Message}");
+			Console.Error.WriteLine($"[ERROR] Android push notifications will be disabled. Exception: {ex}");
 		}
+
 		return services;
 	}
 }
