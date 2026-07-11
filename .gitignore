@@ -368,3 +368,8 @@ FodyWeavers.xsd
 # PushNotification certificate (credentials)
 AuthKey_*
 chatappclient-*
+
+.DS_Store
+.DS_Store/*
+
+.idea
