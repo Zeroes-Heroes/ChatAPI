@@ -4,6 +4,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Models;
+using Services.Presence.Interface;
 using Services.Repositories.DeviceNotificationConfig.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities.Statics;
@@ -12,7 +13,7 @@ using Services.Constants;
 namespace Services.NotificationDispatch.Service
 {
     /// <inheritdoc/>
-    public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IDistributedCache cache, ILogger<NotificationDispatchService> logger) : INotificationDispatch
+    public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IPresenceService presenceService, ILogger<NotificationDispatchService> logger) : INotificationDispatch
     {
         private async Task SendPushNotificationToApple(string deviceToken, NotificationPayload notificationInfo)
         {
@@ -98,31 +99,9 @@ namespace Services.NotificationDispatch.Service
             }
         }
 
-        // TODO (Moved)
-        private async Task<bool> IsUserOnline(int userId)
-        {
-            string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, userId);
-            bool isUserOnline = await cache.GetAsync(connectionEstablishedCacheKey) != null;
-            return isUserOnline;
-        }
-
-        private async Task<int[]> FilterOfflineReceivers(int[] userIds, int skipUser)
-        {
-            List<int> offlineUsers = new List<int>();
-            foreach (int userId in userIds)
-            {
-                bool isUserOnline = await IsUserOnline(userId);
-                if (userId == skipUser || isUserOnline) continue;
-
-                offlineUsers.Add(userId);
-            }
-
-            return offlineUsers.ToArray();
-        }
-
         private async Task NotifyOfflineUser(int userId, NotificationPayload notificationBody)
         {
-            if (await IsUserOnline(userId)) return;
+            if (await presenceService.IsUserOnline(userId)) return;
 
             List<DeviceData> result = await deviceNotificationConfigRepo.FetchEnabledUserDeviceDataById(userId);
 
@@ -131,7 +110,7 @@ namespace Services.NotificationDispatch.Service
 
         private async Task NotifyOfflineUsers(int[] receiversIds, int chatOwenId, NotificationPayload notificationBody)
         {
-            int[] offlineReceivers = await FilterOfflineReceivers(receiversIds, chatOwenId);
+            int[] offlineReceivers = await presenceService.FilterOfflineUsers(receiversIds, chatOwenId);
 
             if (offlineReceivers.Length == 0) return;
 

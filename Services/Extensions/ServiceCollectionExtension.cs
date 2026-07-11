@@ -20,6 +20,8 @@ using Services.Friendship.Service;
 using Services.Hubs.Resolvers;
 using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Service;
+using Services.Presence.Interface;
+using Services.Presence.Service;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
 using Services.Repositories.DeviceNotificationConfig.Interface;
@@ -175,6 +177,7 @@ public static class ServiceCollectionExtension
 			.AddScoped<IDeviceNotificationConfig, DeviceNotificationConfigService>()
 			.AddScoped<IDeviceNotificationConfigRepository, DeviceNotificationConfigRepository>()
 			.AddScoped<INotificationDispatch, NotificationDispatchService>()
+			.AddScoped<IPresenceService, PresenceService>()
 			.AddSignalR()
 				 .AddMessagePackProtocol(options =>
 				 {

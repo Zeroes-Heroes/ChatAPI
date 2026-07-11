@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Services.Extensions;
 using Services.Hubs.Models;
 using Services.NotificationDispatch.Interface;
+using Services.Presence.Interface;
 using Services.Utilities.Statics;
 using System.Security.Claims;
 
@@ -61,7 +62,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		int receiverId = user.Id();
 		string cacheKey = string.Format(CacheKeys.ConnectionEstablished, receiverId);
-		await cache.SetAsync(cacheKey, true, DateTime.UtcNow.AddDays(1));
+		await cache.SetAsync(cacheKey, true, DateTime.UtcNow.AddHours(1));
 
 		DateTime now = DateTime.UtcNow;
 
@@ -144,9 +145,9 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 	{
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		IServiceProvider serviceProvider = scope.ServiceProvider;
-		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
 		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<INotificationDispatch>();
+		IPresenceService presenceService = serviceProvider.GetRequiredService<IPresenceService>();
 		ILogger<BaseHub> logger = serviceProvider.GetRequiredService<ILogger<BaseHub>>();
 
 		ClaimsPrincipal? user = Context.User;
@@ -177,11 +178,8 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		foreach (int receiverId in receiversIds)
 		{
-			string chatEnteredCacheKey = string.Format(CacheKeys.ChatEntered, receiverId, chatId);
-			string connectionEstablishedCacheKey = string.Format(CacheKeys.ConnectionEstablished, receiverId);
-			byte[]? bytes = (await cache.GetAsync(chatEnteredCacheKey));
-			bool isUserInChat = bytes != null;
-			bool isUserOnline = (await cache.GetAsync(connectionEstablishedCacheKey)) != null;
+			bool isUserInChat = await presenceService.IsUserInChat(receiverId, chatId);
+			bool isUserOnline = await presenceService.IsUserOnline(receiverId);
 
 			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, receiverId, default, DateTime.UtcNow);
 			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, receiverId, default, DateTime.UtcNow, [messageEntity.Id]);
