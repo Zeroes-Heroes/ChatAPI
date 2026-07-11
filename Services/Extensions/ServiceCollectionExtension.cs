@@ -220,7 +220,6 @@ public static class ServiceCollectionExtension
 			Console.Error.WriteLine($"[ERROR] Firebase initialization failed: {ex.Message}");
 			Console.Error.WriteLine($"[ERROR] Android push notifications will be disabled. Exception: {ex}");
 		}
-
 		return services;
 	}
 }
