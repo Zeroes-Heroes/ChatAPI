@@ -1,0 +1,38 @@
+# Formatting conventions for this repository.
+#
+# Enforced in CI by the Format step of .github/workflows/pr-checks.yml, which
+# runs `dotnet format --verify-no-changes`. Without this file dotnet format
+# falls back to its built-in default of four spaces, which does not match the
+# code in this repository.
+#
+# Indentation is tabs: that is what the project was written with from the
+# initial commit onwards, and what the majority of the C# files still use.
+
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
+# Entity Framework writes these files; they are four-space indented because
+# `dotnet ef migrations add` generates them that way, and they are never edited
+# by hand. Marking them as generated keeps dotnet format from rewriting them.
+[Database/Migrations/**.cs]
+generated_code = true
+
+[*.{csproj,sln,props,targets}]
+indent_style = space
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
