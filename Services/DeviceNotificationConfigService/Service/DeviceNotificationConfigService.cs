@@ -22,7 +22,7 @@ namespace Services.DeviceNotificationConfig.Service
 			if (doesTokenExistForUser)
 			{
 				return Result.Failure("Something went wrong with your device token");
-			};
+			}
 
 			int userDeviceId = await userRepo.GetUserDeviceIdByDeviceId(deviceId, userId);
 
