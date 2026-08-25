@@ -1,16 +1,5 @@
 name: Promote
 
-# Manual release trigger: Actions -> Promote -> Run workflow.
-# Runs the full check suite, and only if everything passes bumps <Version> in
-# Turbo/Turbo.csproj, commits it to master and pushes the matching v<version>
-# tag. The tag push is what triggers the Release workflow (docker build + ECR).
-#
-# Runner: this repository has no self-hosted runner registered, so every job
-# runs on the GitHub-hosted `ubuntu-latest`. Once a runner is registered, swap
-# `runs-on` here, in pr-checks.yml and in release.yml in one change.
-#
-# The default branch of this repository is `master`, not `main`.
-
 on:
   workflow_dispatch:
     inputs:
@@ -42,8 +31,6 @@ jobs:
       DOTNET_NOLOGO: 1
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
     steps:
-      # The promote job below always checks out master, so a dispatch from any
-      # other branch would check one commit and release a different one.
       - name: Refuse a dispatch from outside master
         if: github.ref != 'refs/heads/master'
         run: |

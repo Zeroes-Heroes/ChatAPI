@@ -1,32 +1,10 @@
 name: Release
 
-# Triggered by the v<version> tags pushed by the Promote workflow.
-# Validates the tag, builds the docker image and pushes it to AWS ECR.
-#
-# This workflow never bumps a version and never runs the check suite - the tag
-# only exists because Promote passed both.
-#
-# Runner: this repository has no self-hosted runner registered, so every job
-# runs on the GitHub-hosted `ubuntu-latest`. That runner is not the deployment
-# host and has no deploy script on it, so the release stops at the ECR push -
-# there is no deploy job. When a trusted self-hosted runner is registered, swap
-# `runs-on` and add the deploy job described in
-# ai-blueprint/skills/devops/github-actions/template-release.yml.
-#
-# The image is built from Turbo/Dockerfile with the repository root as the build
-# context - the Dockerfile restores Turbo, Services, Models and Database.
-#
-# The ECR repository defaults to the GitHub repository name lowercased
-# (`ChatAPI` -> `chatapi`), because ECR repository names may not contain upper
-# case letters. `ECR_REPOSITORY` is the only override.
-
 on:
   push:
     tags:
       - 'v*'
 
-# Two tags pushed in quick succession must not race on the :latest tag, so
-# releases run one at a time and none is cancelled.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -68,8 +46,6 @@ jobs:
 
           echo "Releasing $APP:$VERSION"
 
-      # A mistyped tag must not publish an image built from a tree carrying
-      # another number.
       - name: Verify Turbo.csproj carries the tagged version
         env:
           VERSION: ${{ steps.meta.outputs.version }}

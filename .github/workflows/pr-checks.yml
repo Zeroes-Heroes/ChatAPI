@@ -1,19 +1,5 @@
 name: PR Checks
 
-# Runs every check on a pull request into master and reports the result as one
-# comment on the PR, updated in place on every push. The run fails when any
-# check did not pass, so the PR cannot be merged on a red report.
-#
-# Runner: this repository has no self-hosted runner registered, so every job
-# runs on the GitHub-hosted `ubuntu-latest`. Once a runner is registered, swap
-# `runs-on` here, in promote.yml and in release.yml in one change.
-#
-# The default branch of this repository is `master`, not `main` - every trigger
-# and checkout below names it explicitly.
-#
-# There is no Tests row: the solution holds no test project. Add one and this
-# workflow gains a `dotnet test` step.
-
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
