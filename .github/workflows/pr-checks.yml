@@ -1,0 +1,198 @@
+name: PR Checks
+
+# Runs every check on a pull request into master and reports the result as one
+# comment on the PR, updated in place on every push. The run fails when any
+# check did not pass, so the PR cannot be merged on a red report.
+#
+# Runner: this repository has no self-hosted runner registered, so every job
+# runs on the GitHub-hosted `ubuntu-latest`. Once a runner is registered, swap
+# `runs-on` here, in promote.yml and in release.yml in one change.
+#
+# The default branch of this repository is `master`, not `main` - every trigger
+# and checkout below names it explicitly.
+#
+# There is no Tests row: the solution holds no test project. Add one and this
+# workflow gains a `dotnet test` step.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    branches:
+      - master
+
+run-name: >-
+  PR #${{ github.event.pull_request.number }} checks
+  by @${{ github.actor }}
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  checks:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    env:
+      FORCE_COLOR: 0
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+    steps:
+      - name: Prepare report path
+        id: prepare
+        run: echo "REPORT_PATH=$RUNNER_TEMP/pr-checks-report.md" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup .NET
+        id: dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        id: restore
+        continue-on-error: true
+        run: dotnet restore Turbo.sln
+
+      - name: Format
+        id: format
+        if: ${{ !cancelled() && steps.restore.outcome == 'success' }}
+        continue-on-error: true
+        run: dotnet format Turbo.sln --verify-no-changes --no-restore
+
+      - name: Build
+        id: build
+        if: ${{ !cancelled() && steps.restore.outcome == 'success' }}
+        continue-on-error: true
+        run: dotnet build Turbo.sln -c Release --no-restore
+
+      - name: Build report
+        if: ${{ !cancelled() }}
+        env:
+          PREPARE: ${{ steps.prepare.outcome }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          DOTNET: ${{ steps.dotnet.outcome }}
+          RESTORE: ${{ steps.restore.outcome }}
+          FORMAT: ${{ steps.format.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failed=0
+          rows_file="$RUNNER_TEMP/pr-checks-rows.md"
+          : > "$rows_file"
+
+          row() {
+            case "$2" in
+              success) status="✅ Passed" ;;
+              failure) status="❌ Failed"; failed=$((failed + 1)) ;;
+              *) status="⏭️ Not run"; failed=$((failed + 1)) ;;
+            esac
+            printf '| %s | `%s` | %s |\n' "$1" "$3" "$status" >> "$rows_file"
+          }
+
+          row "Format" "$FORMAT" "dotnet format Turbo.sln --verify-no-changes"
+          row "Build" "$BUILD" "dotnet build Turbo.sln -c Release"
+
+          setup_step=""
+          for candidate in "Prepare report path:$PREPARE" "Checkout:$CHECKOUT" \
+            "Setup .NET:$DOTNET" "Restore dependencies:$RESTORE"; do
+            if [ "${candidate#*:}" != "success" ]; then
+              setup_step="${candidate%%:*}"
+              break
+            fi
+          done
+
+          if [ -n "$setup_step" ]; then
+            headline="## ❌ PR Checks — setup failed"
+          elif [ "$failed" -eq 0 ]; then
+            headline="## ✅ PR Checks — all checks passed"
+          else
+            headline="## ❌ PR Checks — $failed of 2 checks did not pass"
+          fi
+
+          {
+            echo "$headline"
+            echo ""
+            echo "| Check | Command | Result |"
+            echo "| --- | --- | --- |"
+            cat "$rows_file"
+          } > "$REPORT_PATH"
+
+          if [ -n "$setup_step" ]; then
+            {
+              echo ""
+              printf '> The **%s** step failed, so the checks above could not run. Open the workflow run below for its output.\n' "$setup_step"
+            } >> "$REPORT_PATH"
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "Commit \`${HEAD_SHA:0:7}\` · [Workflow run]($RUN_URL) · Attempt $GITHUB_RUN_ATTEMPT"
+          } >> "$REPORT_PATH"
+
+          cat "$REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish or update the PR comment
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pr-checks-report -->';
+            const body = `${marker}\n${fs.readFileSync(process.env.REPORT_PATH, 'utf8')}`;
+            const target = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            };
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...target,
+              per_page: 100,
+            });
+            const previous = comments.find((comment) => comment.body?.includes(marker));
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: target.owner,
+                repo: target.repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({ ...target, body });
+            }
+
+      - name: Fail when a check did not pass
+        if: ${{ !cancelled() }}
+        env:
+          PREPARE: ${{ steps.prepare.outcome }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          DOTNET: ${{ steps.dotnet.outcome }}
+          RESTORE: ${{ steps.restore.outcome }}
+          FORMAT: ${{ steps.format.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        run: |
+          for outcome in "$PREPARE" "$CHECKOUT" "$DOTNET" "$RESTORE" \
+            "$FORMAT" "$BUILD"; do
+            if [ "$outcome" != "success" ]; then
+              echo "::error::One or more checks did not pass. See the report comment on the pull request."
+              exit 1
+            fi
+          done

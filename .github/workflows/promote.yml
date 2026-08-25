@@ -1,0 +1,149 @@
+name: Promote
+
+# Manual release trigger: Actions -> Promote -> Run workflow.
+# Runs the full check suite, and only if everything passes bumps <Version> in
+# Turbo/Turbo.csproj, commits it to master and pushes the matching v<version>
+# tag. The tag push is what triggers the Release workflow (docker build + ECR).
+#
+# Runner: this repository has no self-hosted runner registered, so every job
+# runs on the GitHub-hosted `ubuntu-latest`. Once a runner is registered, swap
+# `runs-on` here, in pr-checks.yml and in release.yml in one change.
+#
+# The default branch of this repository is `master`, not `main`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump'
+        type: choice
+        required: true
+        default: 'patch  (+0.0.1)'
+        options:
+          - 'patch  (+0.0.1)'
+          - 'minor  (+0.1.0)'
+          - 'major  (+1.0.0)'
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+    steps:
+      # The promote job below always checks out master, so a dispatch from any
+      # other branch would check one commit and release a different one.
+      - name: Refuse a dispatch from outside master
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::Promote runs from master only - this dispatch used ${GITHUB_REF_NAME}"
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: master
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Turbo.sln
+
+      - name: Format
+        run: dotnet format Turbo.sln --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build Turbo.sln -c Release --no-restore
+
+  promote:
+    name: Bump version and tag
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GIT_PROMOTE_TOKEN }}
+          ref: master
+          fetch-depth: 0
+
+      - name: Resolve bump type
+        id: input
+        env:
+          BUMP_INPUT: ${{ inputs.bump }}
+        run: echo "type=$(echo "$BUMP_INPUT" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version
+        id: bump
+        env:
+          BUMP_TYPE: ${{ steps.input.outputs.type }}
+        run: |
+          chmod +x scripts/bump-version.sh
+          scripts/bump-version.sh "$BUMP_TYPE" Turbo/Turbo.csproj
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          BUMP_TYPE: ${{ steps.input.outputs.type }}
+        run: |
+          set -euo pipefail
+
+          TAG="v$VERSION"
+
+          # Fail before committing anything if the tag is already taken.
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists locally"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists in origin"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Turbo/Turbo.csproj
+          git commit -m "chore(release): ${TAG} (${BUMP_TYPE})"
+
+          # Annotated tag on the release commit - lightweight tags are NOT
+          # picked up by `git push --follow-tags`.
+          git tag -a "$TAG" -m "Release ${TAG}"
+
+          # --atomic: if master moved while this ran, the branch update is
+          # rejected and the tag must not be published on its own.
+          git push --atomic origin "HEAD:refs/heads/master" "refs/tags/$TAG"
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          PREVIOUS_VERSION: ${{ steps.bump.outputs.previous_version }}
+          BUMP_TYPE: ${{ steps.input.outputs.type }}
+        run: |
+          {
+            echo "### Promoted to \`v${VERSION}\`"
+            echo ""
+            echo "- Previous: \`${PREVIOUS_VERSION}\`"
+            echo "- Bump: \`${BUMP_TYPE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

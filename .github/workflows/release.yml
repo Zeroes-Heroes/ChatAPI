@@ -1,0 +1,129 @@
+name: Release
+
+# Triggered by the v<version> tags pushed by the Promote workflow.
+# Validates the tag, builds the docker image and pushes it to AWS ECR.
+#
+# This workflow never bumps a version and never runs the check suite - the tag
+# only exists because Promote passed both.
+#
+# Runner: this repository has no self-hosted runner registered, so every job
+# runs on the GitHub-hosted `ubuntu-latest`. That runner is not the deployment
+# host and has no deploy script on it, so the release stops at the ECR push -
+# there is no deploy job. When a trusted self-hosted runner is registered, swap
+# `runs-on` and add the deploy job described in
+# ai-blueprint/skills/devops/github-actions/template-release.yml.
+#
+# The image is built from Turbo/Dockerfile with the repository root as the build
+# context - the Dockerfile restores Turbo, Services, Models and Database.
+#
+# The ECR repository defaults to the GitHub repository name lowercased
+# (`ChatAPI` -> `chatapi`), because ECR repository names may not contain upper
+# case letters. `ECR_REPOSITORY` is the only override.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Two tags pushed in quick succession must not race on the :latest tag, so
+# releases run one at a time and none is cancelled.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve app name, version and repository
+        id: meta
+        env:
+          ECR_REPOSITORY_OVERRIDE: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          APP="${GITHUB_REPOSITORY##*/}"
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not a v<semver> tag"
+            exit 1
+          fi
+
+          DEFAULT_REPOSITORY="$(echo "$APP" | tr '[:upper:]' '[:lower:]')"
+
+          {
+            echo "app=$APP"
+            echo "version=$VERSION"
+            echo "repository=${ECR_REPOSITORY_OVERRIDE:-$DEFAULT_REPOSITORY}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Releasing $APP:$VERSION"
+
+      # A mistyped tag must not publish an image built from a tree carrying
+      # another number.
+      - name: Verify Turbo.csproj carries the tagged version
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          PROJECT_VERSION="$(
+            grep -oE '<Version>[^<]+</Version>' Turbo/Turbo.csproj \
+              | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'
+          )"
+
+          if [ "$PROJECT_VERSION" != "$VERSION" ]; then
+            echo "::error::Turbo/Turbo.csproj is at ${PROJECT_VERSION:-unset} but the tag says $VERSION"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build the image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ steps.meta.outputs.repository }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          docker build \
+            -f ./Turbo/Dockerfile \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            .
+
+      - name: Push the image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ steps.meta.outputs.repository }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Summary
+        env:
+          ECR_REPOSITORY: ${{ steps.meta.outputs.repository }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          {
+            echo "### Pushed \`${ECR_REPOSITORY}:${IMAGE_TAG}\` to ECR"
+            echo ""
+            echo "- Also tagged \`latest\`"
+            echo "- No deploy job: this repository has no self-hosted runner yet"
+          } >> "$GITHUB_STEP_SUMMARY"
