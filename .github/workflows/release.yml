@@ -84,6 +84,7 @@ jobs:
             .
 
       - name: Push the image to Amazon ECR
+        id: push-ecr
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ steps.meta.outputs.repository }}
@@ -91,6 +92,25 @@ jobs:
         run: |
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Send deployment message to SQS
+        if: ${{ success() && steps.push-ecr.outcome == 'success' }}
+        env:
+          ECR_REPOSITORY: ${{ steps.meta.outputs.repository }}
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          MESSAGE_BODY="$(jq -cn \
+            --arg repo "$ECR_REPOSITORY" \
+            --arg version "$IMAGE_TAG" \
+            '{repo: $repo, version: $version}')"
+
+          aws sqs send-message \
+            --region eu-central-1 \
+            --queue-url "https://sqs.eu-central-1.amazonaws.com/069691036768/deploy-ecr.fifo" \
+            --message-group-id "$ECR_REPOSITORY" \
+            --message-deduplication-id "${ECR_REPOSITORY}-${IMAGE_TAG}" \
+            --message-body "$MESSAGE_BODY" \
+            --output text --query MessageId
 
       - name: Summary
         env:
@@ -101,5 +121,5 @@ jobs:
             echo "### Pushed \`${ECR_REPOSITORY}:${IMAGE_TAG}\` to ECR"
             echo ""
             echo "- Also tagged \`latest\`"
-            echo "- No deploy job: this repository has no self-hosted runner yet"
+            echo "- Deployment message sent to SQS"
           } >> "$GITHUB_STEP_SUMMARY"
