@@ -17,6 +17,13 @@ namespace Services.Membership.Interface;
 /// may be delivered and acknowledged at all) and the push fan-out (checked immediately before sending,
 /// per MESSAGE_SYNC_ANALYSIS.md).</item>
 /// </list>
+/// Stage 09 adds one more input to the same answer: for a PERSONAL chat it also asks
+/// <see cref="Services.Contacts.Interface.IPersonalRelationDirectory"/> whether the two people may still
+/// create new correspondence, and reports it as
+/// <see cref="ChatAccess.PersonalCorrespondenceSuspended"/>. It narrows
+/// <see cref="ChatAccess.CanSendNewMessages"/> only - reading and the status traffic of the messages
+/// that already exist are deliberately untouched, and a group is never affected.
+///
 /// It composes the stage-06 <see cref="Services.Sessions.Interface.IAccountContextBoundary"/> so a
 /// surface needs one call rather than two: a chat belonging to a superseded account context answers
 /// <see cref="ChatAccessState.None"/> here, exactly as it did before.

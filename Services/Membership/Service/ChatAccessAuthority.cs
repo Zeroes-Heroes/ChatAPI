@@ -3,6 +3,7 @@ using Database.Context;
 using Database.Entities.Sync;
 using Database.Enums.Sync;
 using Microsoft.EntityFrameworkCore;
+using Services.Contacts.Interface;
 using Services.Extensions;
 using Services.Membership.Interface;
 using Services.Membership.Models;
@@ -22,7 +23,8 @@ namespace Services.Membership.Service;
 /// mutation on such a chat projects it (<see cref="ChatMembershipService.ProjectCreatedChatAsync"/>'s
 /// lazy counterpart) so every later answer comes from the membership model.
 /// </summary>
-public sealed class ChatAccessAuthority(AppDbContext db, IAccountContextBoundary boundary) : IChatAccessAuthority
+public sealed class ChatAccessAuthority(
+	AppDbContext db, IAccountContextBoundary boundary, IPersonalRelationDirectory relations) : IChatAccessAuthority
 {
 	public async Task<ChatAccess> GetAsync(ClaimsPrincipal caller, int legacyChatId, CancellationToken ct = default)
 	{
@@ -157,13 +159,15 @@ public sealed class ChatAccessAuthority(AppDbContext db, IAccountContextBoundary
 				.Where(w => stintIds.Contains(w.MembershipId))
 				.ToListAsync(ct);
 
-		HashSet<string> projectedChats = [.. await db.SyncChats.AsNoTracking()
+		// Kind as well as existence: stage 09's personal-correspondence gate applies to a Direct chat and
+		// never to a group, and the kind is decided once at creation (it is not re-derived from today's
+		// participant count).
+		Dictionary<string, SyncChatKind> projectedChats = await db.SyncChats.AsNoTracking()
 			.Where(c => chatIds.Contains(c.Id))
-			.Select(c => c.Id)
-			.ToListAsync(ct)];
+			.ToDictionaryAsync(c => c.Id, c => c.Kind, StringComparer.Ordinal, ct);
 
 		// Only needed for chats that have no projection at all - the legacy fallback below.
-		int[] unprojected = [.. legacyChatIds.Where(id => !projectedChats.Contains(SyncChatIdentity.IdOf(id)))];
+		int[] unprojected = [.. legacyChatIds.Where(id => !projectedChats.ContainsKey(SyncChatIdentity.IdOf(id)))];
 		HashSet<int> legacyMemberships = unprojected.Length == 0
 			? []
 			: [.. await db.Chats.AsNoTracking()
@@ -171,13 +175,23 @@ public sealed class ChatAccessAuthority(AppDbContext db, IAccountContextBoundary
 				.Select(c => c.Id)
 				.ToListAsync(ct)];
 
+		// Stage 09: the counterpart of every PERSONAL chat in this answer, and whether new correspondence
+		// with them is suspended right now. Resolved once for the whole set (a chat-list surface asks for
+		// every chat at once); empty - and not even queried - when the set contains no personal chat.
+		IReadOnlyDictionary<int, bool> personalSuspension =
+			await PersonalSuspensionAsync(legacyUserId, legacyChatIds, projectedChats, legacyMemberships, ct);
+
 		Dictionary<int, ChatAccess> result = [];
 		foreach (int legacyChatId in legacyChatIds)
 		{
 			string chatId = SyncChatIdentity.IdOf(legacyChatId);
-			if (!projectedChats.Contains(chatId))
+			bool suspended = personalSuspension.TryGetValue(legacyChatId, out bool s) && s;
+
+			if (!projectedChats.ContainsKey(chatId))
 			{
-				result[legacyChatId] = legacyMemberships.Contains(legacyChatId) ? ChatAccess.UnboundedActive : ChatAccess.Denied;
+				result[legacyChatId] = legacyMemberships.Contains(legacyChatId)
+					? ChatAccess.UnboundedActive with { PersonalCorrespondenceSuspended = suspended }
+					: ChatAccess.Denied;
 				continue;
 			}
 
@@ -215,9 +229,67 @@ public sealed class ChatAccessAuthority(AppDbContext db, IAccountContextBoundary
 				? ChatAccessState.Active
 				: ChatAccessState.Frozen;
 
-			result[legacyChatId] = new ChatAccess(state, windows);
+			result[legacyChatId] = new ChatAccess(state, windows, suspended);
 		}
 
 		return result;
+	}
+
+	/// <summary>
+	/// Per chat: is this a personal chat whose new correspondence is suspended for this caller
+	/// (plan/09-contacts-privacy.md)? Only a <see cref="SyncChatKind.Direct"/> chat is considered - and,
+	/// for a chat created before stage 07 and therefore carrying no kind, a legacy chat with exactly two
+	/// participants, which is the same rule its creation applied. A group is never gated here.
+	///
+	/// The counterpart is read from the LEGACY participant list on purpose: a personal chat's two people
+	/// never change, and that row survives everything (it is also what keeps a removed member's archive
+	/// readable), so it answers for a chat with or without a membership projection.
+	/// </summary>
+	private async Task<IReadOnlyDictionary<int, bool>> PersonalSuspensionAsync(
+		int legacyUserId, IReadOnlyCollection<int> legacyChatIds, IReadOnlyDictionary<string, SyncChatKind> projectedChats,
+		IReadOnlySet<int> legacyMemberships, CancellationToken ct)
+	{
+		int[] candidates = [.. legacyChatIds.Where(id =>
+			projectedChats.TryGetValue(SyncChatIdentity.IdOf(id), out SyncChatKind kind)
+				? kind == SyncChatKind.Direct
+				: legacyMemberships.Contains(id))];
+
+		if (candidates.Length == 0)
+		{
+			return new Dictionary<int, bool>();
+		}
+
+		var participants = await db.Chats.AsNoTracking()
+			.Where(c => candidates.Contains(c.Id))
+			.Select(c => new { c.Id, UserIds = c.Users.Select(u => u.Id).ToList() })
+			.ToListAsync(ct);
+
+		Dictionary<int, int> counterpartOf = [];
+		foreach (var chat in participants)
+		{
+			// An unprojected chat qualifies only at exactly two participants; a projected Direct chat is
+			// personal by its own persisted kind, whatever the legacy row happens to list.
+			bool personal = projectedChats.ContainsKey(SyncChatIdentity.IdOf(chat.Id)) || chat.UserIds.Count == 2;
+			if (!personal)
+			{
+				continue;
+			}
+
+			int[] others = [.. chat.UserIds.Where(id => id != legacyUserId)];
+			if (others.Length == 1)
+			{
+				counterpartOf[chat.Id] = others[0];
+			}
+		}
+
+		if (counterpartOf.Count == 0)
+		{
+			return new Dictionary<int, bool>();
+		}
+
+		IReadOnlySet<int> suspended = await relations.SuspendedCorrespondentsAsync(
+			legacyUserId, [.. counterpartOf.Values.Distinct()], ct);
+
+		return counterpartOf.ToDictionary(entry => entry.Key, entry => suspended.Contains(entry.Value));
 	}
 }

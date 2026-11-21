@@ -129,6 +129,11 @@ broadcast only ever runs after a successful commit.
 
 ## Blocking
 
+> Stage 09 took over the model behind this section: the blocker is now explicit on
+> `SyncPersonalBlocks`, a block can exist with no friendship row at all, and `PersonalBlockDirectory` is
+> a thin adapter over `Services/Contacts`'s `IPersonalRelationDirectory`. The rule this module applies is
+> unchanged. See `docs/contacts-privacy.md`.
+
 `IPersonalBlockDirectory` answers one question: which of these participants have blocked the actor.
 Direction comes from the legacy `Friendships` row, which has no blocker column: a row can only reach
 `Blocked` through `POST /friends/request-respond`, whose caller is always the row's `TargetUserId`, so

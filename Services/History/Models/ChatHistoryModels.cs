@@ -10,6 +10,13 @@ namespace Services.History.Models;
 /// </summary>
 /// <param name="IsFrozen">This message falls in a frozen archive window, so its statuses are the ones captured at that stint's exit, not today's.</param>
 /// <param name="StoredOnThisDevice">This exact SQLite copy has already confirmed storing it (private per-device progress; never part of any public mark).</param>
+/// <param name="CanAuthorRevise">
+/// Stage 09: this caller holds AUTHOR rights over this message from this device
+/// (<see cref="Services.Authorship.Interface.IMessageAuthorshipAuthority"/>) - true for its own
+/// messages, including the ones inside a read-only archive. The edit/delete operations themselves are a
+/// later stage; this is the prepared right, and any such operation must re-ask the authority and
+/// re-validate trust at the moment of the write.
+/// </param>
 public sealed record ChatHistoryMessage(
 	int MessageId,
 	int SenderId,
@@ -17,6 +24,7 @@ public sealed record ChatHistoryMessage(
 	DateTime CreatedAt,
 	bool IsFrozen,
 	bool StoredOnThisDevice,
+	bool CanAuthorRevise,
 	IReadOnlyList<ChatHistoryStatus> Statuses);
 
 /// <param name="Status">The highest status this recipient reached: <see cref="MessageStatus.Seen"/> implies it was received too.</param>

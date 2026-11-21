@@ -66,6 +66,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<SyncMembershipLegacyStatusSnapshotEntity> SyncMembershipLegacyStatusSnapshots { get; set; }
 	public DbSet<SyncArchiveDeviceDeliveryEntity> SyncArchiveDeviceDeliveries { get; set; }
 
+	// Personal contacts and profile visibility (plan 09). The directional block the legacy Friendships
+	// row cannot express; the friend-request lifecycle itself stays on that row.
+	public DbSet<SyncPersonalBlockEntity> SyncPersonalBlocks { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -116,5 +120,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new SyncMembershipSharedHistoryWindowConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncMembershipLegacyStatusSnapshotConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncArchiveDeviceDeliveryConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncPersonalBlockConfiguration());
 	}
 }

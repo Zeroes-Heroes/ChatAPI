@@ -9,6 +9,13 @@ public static class LiveEvents
 
 	/// <summary>Client event name for a committed group composition change (stage 07) - see Services/Membership/Service/ChatMembershipService.cs. A removed subject receives its own copy of this event without the actor's identity.</summary>
 	public static readonly string ChatMembershipChanged = "chat-membership-changed";
+	/// <summary>
+	/// Client event name for a committed personal-relation change (stage 09, plan/09-contacts-privacy.md)
+	/// - a block, an unblock or a contact removal. Both parties receive it, each with the copy that is
+	/// true for IT: the same projection <c>GET /friends</c> returns, so a device sees the same relation
+	/// and the same profile data over SignalR as over HTTP.
+	/// </summary>
+	public static readonly string PersonalRelationChanged = "personal-relation-changed";
 	public static readonly string NewMessageCreated = "new-message-created";
 	public static readonly string MessageStatusUpdate = "message-status-update";
 

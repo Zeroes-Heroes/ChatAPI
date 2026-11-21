@@ -316,10 +316,16 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, async () =>
 		{
 			ChatAccess access = await accessAuthority.LockChatAndAuthorizeAsync(user, chatId, Context.ConnectionAborted);
-			mayPublish = access.CanSend;
+			// Stage 09: CanSendNewMessages, not CanSend. A personal chat whose two people blocked each
+			// other or stopped being contacts keeps everything it already has - readable history that goes
+			// on receiving status updates - and only loses the right to create NEW correspondence. The
+			// chat row taken just above is what serializes this against a concurrent block: either the
+			// message commits before the block is visible, or this read waits and is then refused.
+			mayPublish = access.CanSendNewMessages;
 			if (!mayPublish)
 			{
-				// A frozen archive is read-only, and a non-member has nothing here at all.
+				// A frozen archive is read-only, a non-member has nothing here at all, and a suspended
+				// personal chat accepts no new messages.
 				return;
 			}
 

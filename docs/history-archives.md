@@ -148,5 +148,8 @@ distinct (verified in SQL).
    legacy history it serves today is plaintext legacy content, not key-protected packages.
 3. **`SyncMembershipMessageStatusSnapshots`** (sequence space) stays unwritten until `SyncMessages`
    exist; stage 11 must start writing it alongside the legacy snapshot, or replace it.
-4. **Profile/unknown-identity filtering (stage 09)** still applies to the participant identities a
-   frozen metadata snapshot names.
+4. **Profile/unknown-identity filtering (stage 09)** — done: `Services/Contacts`'s `IProfileVisibility`
+   is the one resolver, and `GET /chat/history` now also carries stage 09's `canAuthorRevise`. The
+   history page and the frozen metadata snapshot still name participants by numeric id only, so any
+   later surface that renders those ids must route them through that resolver
+   (`docs/contacts-privacy.md`).

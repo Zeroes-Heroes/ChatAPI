@@ -1157,6 +1157,30 @@ namespace Database.Migrations
                     b.ToTable("SyncArchiveDeviceDeliveries", (string)null);
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncPersonalBlockEntity", b =>
+                {
+                    b.Property<int>("BlockerUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubjectUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LiftedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("BlockerUserId", "SubjectUserId");
+
+                    b.HasIndex("SubjectUserId", "BlockerUserId");
+
+                    b.ToTable("SyncPersonalBlocks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncPersonalBlocks_NotSelf", "\"BlockerUserId\" <> \"SubjectUserId\"");
+                        });
+                });
+
             modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
                 {
                     b.Property<string>("MembershipId")
@@ -2540,6 +2564,27 @@ namespace Database.Migrations
                         .HasConstraintName("FK_UserLoginCodes_UserDeviceId_UserDevices_Id");
 
                     b.Navigation("UserDevice");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncPersonalBlockEntity", b =>
+                {
+                    b.HasOne("Database.Entities.UserEntity", "Blocker")
+                        .WithMany()
+                        .HasForeignKey("BlockerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncPersonalBlocks_BlockerUserId_Users_Id");
+
+                    b.HasOne("Database.Entities.UserEntity", "Subject")
+                        .WithMany()
+                        .HasForeignKey("SubjectUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncPersonalBlocks_SubjectUserId_Users_Id");
+
+                    b.Navigation("Blocker");
+
+                    b.Navigation("Subject");
                 });
 
             modelBuilder.Entity("Database.Entities.MessageEntity", b =>

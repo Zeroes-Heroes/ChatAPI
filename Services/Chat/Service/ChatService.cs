@@ -157,7 +157,10 @@ internal class ChatService(
 				view = new ChatMembershipView(chat.Users.Count > 2, IsArchived: false, [.. chat.Users.Select(u => u.Id)]);
 			}
 
-			chatsResponse.Add(new GetChatsResponse(chat.Id, chat.Name!, [.. view.MemberLegacyUserIds], view.IsGroup, view.IsArchived));
+			// Stage 09: the same authority answers whether new correspondence is possible, so the list and
+			// the hub's send-message refusal can never disagree about one chat.
+			chatsResponse.Add(new GetChatsResponse(
+				chat.Id, chat.Name!, [.. view.MemberLegacyUserIds], view.IsGroup, view.IsArchived, chatAccess.CanSendNewMessages));
 		}
 
 		return Result<GetChatsResponse[]>.Success([.. chatsResponse]);

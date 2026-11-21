@@ -64,15 +64,35 @@ public sealed record LegacyHistoryWindow(DateTime? FromUtc, DateTime? ThroughUtc
 /// between simply not covered by any window. It is empty exactly when
 /// <paramref name="State"/> is <see cref="ChatAccessState.None"/>.
 /// </summary>
-public sealed record ChatAccess(ChatAccessState State, IReadOnlyList<LegacyHistoryWindow> Windows)
+/// <param name="PersonalCorrespondenceSuspended">
+/// Stage 09: this is a PERSONAL chat whose two people may not create new correspondence right now -
+/// either side blocked the other, or they are no longer contacts ("Блокиране или премахване на контакт
+/// прекратява новата лична кореспонденция"). It suspends <see cref="CanSendNewMessages"/> only:
+/// <see cref="CanRead"/> and <see cref="CanSend"/> stay exactly as they were, because the permitted old
+/// messages must remain readable AND keep receiving status updates. Always false for a group - "Личното
+/// блокиране запазва активното участие и кореспонденцията в общи групи".
+/// </param>
+public sealed record ChatAccess(
+	ChatAccessState State, IReadOnlyList<LegacyHistoryWindow> Windows, bool PersonalCorrespondenceSuspended = false)
 {
 	public static readonly ChatAccess Denied = new(ChatAccessState.None, []);
 
 	/// <summary>An unprojected legacy chat the caller is a member of: everything, as before stage 07.</summary>
 	public static readonly ChatAccess UnboundedActive = new(ChatAccessState.Active, [new LegacyHistoryWindow(null, null)]);
 
-	/// <summary>May publish new content into this chat. False for a frozen (read-only archive) stint.</summary>
+	/// <summary>
+	/// An ACTIVE stint: may act in this chat at all - mark Seen, register presence, be acknowledged.
+	/// False for a frozen (read-only archive) stint. Deliberately NOT affected by a personal block: the
+	/// status traffic of the messages that already exist must continue
+	/// (<see cref="CanSendNewMessages"/> is the gate for creating new ones).
+	/// </summary>
 	public bool CanSend => State == ChatAccessState.Active;
+
+	/// <summary>
+	/// May create NEW content here: an active stint whose personal correspondence is not suspended. This
+	/// is the only gate that a block/removal closes.
+	/// </summary>
+	public bool CanSendNewMessages => CanSend && !PersonalCorrespondenceSuspended;
 
 	/// <summary>May read something in this chat - current content or just a frozen archive.</summary>
 	public bool CanRead => State != ChatAccessState.None;

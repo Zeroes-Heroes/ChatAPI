@@ -13,8 +13,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Services.Authorship.Interface;
+using Services.Authorship.Service;
 using Services.Chat.Interface;
 using Services.Chat.Service;
+using Services.Contacts.Interface;
+using Services.Contacts.Service;
 using Services.DeviceNotificationConfig.Interface;
 using Services.DeviceNotificationConfig.Service;
 using Services.Friendship.Interface;
@@ -261,6 +265,16 @@ public static class ServiceCollectionExtension
 			// it reads through the caller's own AppDbContext and writes only the private per-device
 			// archive record.
 			.AddScoped<IChatHistoryService, ChatHistoryService>()
+			// Stage 09 personal contacts / profile visibility (Services/Contacts). Scoped for the same
+			// reason as the two modules above: the directory and the resolver read through the CALLER's
+			// own AppDbContext, and the writer's row has to commit inside the caller's own
+			// TrustedMutation transaction.
+			.AddScoped<IPersonalRelationDirectory, PersonalRelationDirectory>()
+			.AddScoped<IProfileVisibility, ProfileVisibilityService>()
+			.AddScoped<IPersonalRelationService, PersonalRelationService>()
+			// Author rights for a future edit/delete: a pure decision over an already-resolved ChatAccess
+			// and the caller's own claims, with no state and no database of its own.
+			.AddSingleton<IMessageAuthorshipAuthority, MessageAuthorshipAuthority>()
 			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
 			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
 			// share one timer loop instead of being two near-identical hosted services.

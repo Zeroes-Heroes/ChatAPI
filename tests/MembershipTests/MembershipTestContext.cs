@@ -11,8 +11,13 @@ using Microsoft.AspNetCore.SignalR;
 using Services.History.Interface;
 using Services.History.Service;
 using Services.Hubs;
+using Microsoft.Extensions.Logging.Abstractions;
+using Services.Authorship.Service;
+using Services.Contacts.Interface;
+using Services.Contacts.Service;
 using Services.Membership.Interface;
 using Services.Membership.Service;
+using Services.NotificationDispatch.Interface;
 using Services.Sessions;
 using Services.Sessions.Service;
 
@@ -32,14 +37,20 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 
 	public AppDbContext CreateContext() => fixture.CreateContext();
 
+	/// <summary>Stage 09's personal-relation reader, over the same real tables the production wiring uses.</summary>
+	public static IPersonalRelationDirectory Relations(AppDbContext db) => new PersonalRelationDirectory(db);
+
+	/// <summary>Stage 09's one profile resolver.</summary>
+	public static IProfileVisibility Profiles(AppDbContext db) => new ProfileVisibilityService(db, Relations(db));
+
 	public IChatAccessAuthority Authority(AppDbContext db) =>
-		new ChatAccessAuthority(db, new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()));
+		new ChatAccessAuthority(db, new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()), Relations(db));
 
 	public IChatMembershipService Membership(AppDbContext db) =>
 		new ChatMembershipService(
 			db,
 			new SyncAccountProvisioningService(),
-			new PersonalBlockDirectory(db),
+			new PersonalBlockDirectory(Relations(db)),
 			new SessionTrustChecker(db, Clock),
 			new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()),
 			Authority(db),
@@ -47,7 +58,24 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			Clock);
 
 	/// <summary>Stage 08's history/archive reader, over the same real access check the production wiring uses.</summary>
-	public IChatHistoryService History(AppDbContext db) => new ChatHistoryService(db, Authority(db), Clock);
+	public IChatHistoryService History(AppDbContext db) =>
+		new ChatHistoryService(db, Authority(db), new MessageAuthorshipAuthority(), Clock);
+
+	/// <summary>
+	/// Stage 09's relation writer, over the same real trust checker every other mutation uses. The push
+	/// dispatcher is a no-op sink: a real one would send to Apple/Firebase, which a test process must not
+	/// do, and nothing in these tests asserts on it.
+	/// </summary>
+	public IPersonalRelationService PersonalRelations(AppDbContext db) =>
+		new PersonalRelationService(
+			db,
+			Relations(db),
+			Profiles(db),
+			new SessionTrustChecker(db, Clock),
+			Hub,
+			new NoOpNotificationDispatch(),
+			NullLogger<PersonalRelationService>.Instance,
+			Clock);
 
 	/// <summary>A legacy message, the only kind that exists today (SyncMessages start in stage 11).</summary>
 	public static async Task<MessageEntity> SendLegacyAsync(AppDbContext db, ChatEntity chat, int senderLegacyUserId, string content, DateTime atUtc)
@@ -183,6 +211,20 @@ internal sealed record TestMember(
 	SyncLocalInstanceEntity Instance,
 	SyncDeviceSessionEntity Session,
 	ClaimsPrincipal Principal);
+
+/// <summary>
+/// The one genuinely unavailable seam for the relation writer: push delivery leaves the process. Every
+/// other collaborator above is the real service over the real database.
+/// </summary>
+internal sealed class NoOpNotificationDispatch : INotificationDispatch
+{
+	public Task NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId) => Task.CompletedTask;
+	public Task NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId) => Task.CompletedTask;
+	public Task NotificationForNewFriendshipRequest(int receiverUserId, string name) => Task.CompletedTask;
+	public Task NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId) => Task.CompletedTask;
+	public Task NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId) => Task.CompletedTask;
+	public Task NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId) => Task.CompletedTask;
+}
 
 /// <summary>One recorded live publication: the event name, its payload and the audience it was addressed to.</summary>
 internal sealed record SentEvent(string Event, object? Payload, IReadOnlyList<string> Audience);

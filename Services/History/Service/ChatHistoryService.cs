@@ -5,6 +5,8 @@ using Database.Entities;
 using Database.Entities.Sync;
 using Database.Enums;
 using Microsoft.EntityFrameworkCore;
+using Services.Authorship.Interface;
+using Services.Authorship.Models;
 using Services.History.Interface;
 using Services.History.Models;
 using Services.Membership.Interface;
@@ -22,7 +24,8 @@ namespace Services.History.Service;
 /// every writer in that chat for the length of a download.
 /// </summary>
 public sealed class ChatHistoryService(
-	AppDbContext db, IChatAccessAuthority accessAuthority, TimeProvider timeProvider) : IChatHistoryService
+	AppDbContext db, IChatAccessAuthority accessAuthority, IMessageAuthorshipAuthority authorship,
+	TimeProvider timeProvider) : IChatHistoryService
 {
 	/// <summary>Upper bound on one page, so a client cannot ask for an unbounded scan (docs/sync-contract-v1.md: pages are bounded and must advance or terminate).</summary>
 	public const int MaxPageSize = 100;
@@ -95,6 +98,12 @@ public sealed class ChatHistoryService(
 
 		IReadOnlyDictionary<int, IReadOnlyList<ChatHistoryStatus>> statuses = await ResolveStatusesAsync(permitted, ct);
 
+		// Stage 09: the author rights a future edit/delete will need, decided by the one authority rather
+		// than by each surface comparing sender ids. A frozen window still produces them - that is the
+		// "собствено съобщение в архив" case.
+		IReadOnlySet<int> revisable = authorship.RevisableByAuthor(
+			caller, access, [.. permitted.Select(m => new AuthoredMessage(m.Id, m.SenderId, m.CreatedAt))]);
+
 		List<ChatHistoryMessage> messages = [.. permitted.Select(m => new ChatHistoryMessage(
 			m.Id,
 			m.SenderId,
@@ -102,6 +111,7 @@ public sealed class ChatHistoryService(
 			m.CreatedAt,
 			m.Window.IsFrozen,
 			storedHere.Contains(m.Id),
+			revisable.Contains(m.Id),
 			statuses.TryGetValue(m.Id, out IReadOnlyList<ChatHistoryStatus>? s) ? s : Array.Empty<ChatHistoryStatus>()))];
 
 		// Complete exactly when the scan itself ran out of rows - never when the FILTERED page is empty,
