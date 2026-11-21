@@ -1,4 +1,7 @@
-﻿using Database.Entities;
+﻿using System.Net;
+using System.Security.Claims;
+using Database.Context;
+using Database.Entities;
 using Database.Enums;
 using Microsoft.AspNetCore.SignalR;
 using Services.Friendship.Interface;
@@ -8,13 +11,17 @@ using Services.Hubs.Models;
 using Services.NotificationDispatch.Interface;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.User.Interface;
+using Services.Sessions.Interface;
+using Services.Sessions.Models;
+using Services.Sessions.Service;
 using Services.Utilities;
-using System.Net;
 using static Services.Utilities.Statics.LiveEvents;
 
 namespace Services.Friendship.Service;
 
-public class FriendshipService(IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatcher) : IFriendshipService
+public class FriendshipService(
+	IUserRepository userRepo, IFriendshipRepository friendRepo, IHubContext<BaseHub> hubContext,
+	INotificationDispatch notificationDispatcher, AppDbContext dbContext, ISessionTrustChecker trustChecker) : IFriendshipService
 {
 	private readonly IHubContext<BaseHub> hubContext = hubContext;
 
@@ -23,7 +30,8 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 	/// </summary>
 	/// <param name="senderUserId">The user id which sends the friend request.</param>
 	/// <param name="phone">The receiver's phone number. </param>
-	public async Task<Result<FriendshipDTO>> AddFriend(int senderUserId, string phone)
+	/// <param name="actingUser">See IFriendshipService.AddFriend's own doc comment.</param>
+	public async Task<Result<FriendshipDTO>> AddFriend(int senderUserId, string phone, ClaimsPrincipal actingUser)
 	{
 		UserEntity? targetUser = await userRepo.GetUserNoTracking(phone);
 
@@ -35,14 +43,24 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 
 		FriendshipEntity? friendship = await friendRepo.GetAnyFriendshipByUserIds([senderUserId, targetUser.Id]);
 
-		if (friendship is null)
-			friendRepo.AddFriendship(senderUserId, targetUser.Id);
-		else if (friendship.Status == FriendshipStatus.Rejected)
-			friendship.Status = FriendshipStatus.Pending;
-		else
+		if (friendship is not null && friendship.Status != FriendshipStatus.Rejected)
 			return Result<FriendshipDTO>.Failure("You already have relations with this user.", HttpStatusCode.Conflict);
 
-		await friendRepo.SaveChangesAsync();
+		// Re-validated, locked, immediately before the friendship row actually commits - see
+		// TrustedMutation's own doc comment; the broadcast to the other party below only runs after.
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, actingUser, () =>
+		{
+			if (friendship is null)
+				friendRepo.AddFriendship(senderUserId, targetUser.Id);
+			else
+				friendship.Status = FriendshipStatus.Pending;
+			return friendRepo.SaveChangesAsync();
+		});
+
+		if (!trust.IsTrusted)
+		{
+			return Result<FriendshipDTO>.Failure("Session is not currently trusted.", HttpStatusCode.Unauthorized);
+		}
 
 		UserEntity senderUser = (await userRepo.GetUserNoTracking(senderUserId))!;
 
@@ -104,7 +122,7 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 	/// <param name="senderUserId">The id of the user who sent the friend request.</param>
 	/// <param name="targetUserId">The targeted user id (receiver).</param>
 	/// <param name="newStatus">The status to update with.</param>
-	public async Task<Result> RespondToFriendRequest(int senderUserId, int targetUserId, FriendshipStatus newStatus)
+	public async Task<Result> RespondToFriendRequest(int senderUserId, int targetUserId, FriendshipStatus newStatus, ClaimsPrincipal actingUser)
 	{
 		FriendshipEntity? friendship = await friendRepo.GetSpecificFriendshipByUserIds(senderUserId, targetUserId);
 
@@ -120,8 +138,18 @@ public class FriendshipService(IUserRepository userRepo, IFriendshipRepository f
 		//	friendship.ModifiedBy == senderUserId)
 		//	return Result.Failure("You cannot change the status.", HttpStatusCode.Forbidden);
 
-		friendship.Status = newStatus;
-		await friendRepo.SaveChangesAsync();
+		// Re-validated, locked, immediately before the status change actually commits - see
+		// TrustedMutation's own doc comment; the broadcast to the original sender below only runs after.
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, actingUser, () =>
+		{
+			friendship.Status = newStatus;
+			return friendRepo.SaveChangesAsync();
+		});
+
+		if (!trust.IsTrusted)
+		{
+			return Result.Failure("Session is not currently trusted.", HttpStatusCode.Unauthorized);
+		}
 
 		await NotifyFriendshipStatusChange(senderUserId, targetUserId, newStatus);
 

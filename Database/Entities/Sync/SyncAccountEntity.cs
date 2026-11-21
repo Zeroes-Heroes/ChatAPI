@@ -34,6 +34,20 @@ public class SyncAccountEntity
 	/// <summary>Null means this is the current/active context for its LegacyUserId. Set once a fresh context supersedes it; the row and its data are retained, not deleted.</summary>
 	public DateTime? EndedAtUtc { get; set; }
 
+	/// <summary>
+	/// Stage 05 (plan/05-device-sessions.md): set true the first time any device of this account is
+	/// explicitly revoked, and never reset back to false - including once the revocation leaves zero
+	/// currently-trusted devices. This is what stops "revoke the last trusted device" from silently
+	/// turning the next registration attempt back into an unapproved "first device": the enrollment
+	/// decision (<see cref="Services.Sessions.Interface.IDeviceTrustService"/>) requires
+	/// DeviceApproval whenever this flag is true, even with zero currently-trusted devices, per
+	/// docs/sync-contract-v1.md: "After explicit revocation, unknown/revoked registrations require
+	/// another currently trusted device even with valid recovery. Without it old context stays
+	/// blocked." A genuinely fresh start (plan/05-device-sessions.md's "ново начало") is a new
+	/// AccountContextId (a new row, defaulting false again), never this flag clearing on the same row.
+	/// </summary>
+	public bool RevocationBarrierActive { get; set; }
+
 	public virtual UserEntity LegacyUser { get; set; } = null!;
 	public virtual ICollection<SyncDeviceRegistrationEntity> Devices { get; set; } = [];
 	public virtual ICollection<SyncMembershipEntity> Memberships { get; set; } = [];

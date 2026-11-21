@@ -16,6 +16,12 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.6" />
+    <!-- Stage 05 (plan/05-device-sessions.md): Services.Sessions.Service.SessionMaintenanceHostedService
+         is a BackgroundService (IHostedService) - this project is a plain class library (not
+         Microsoft.NET.Sdk.Web), so it needs this explicit, same as the other individual
+         Microsoft.AspNetCore.*/Microsoft.Extensions.* packages already listed here rather than relying
+         on Turbo.csproj's implicit Microsoft.AspNetCore.App FrameworkReference. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />

@@ -26,7 +26,10 @@ internal static class TestData
 	public static async Task<(SyncDeviceRegistrationEntity Device, SyncLocalInstanceEntity Instance)> CreateDeviceAsync(
 		AppDbContext db, SyncAccountEntity account, CancellationToken ct = default)
 	{
-		SyncDeviceRegistrationEntity device = new(NewId("dev"), account.Id, DateTime.UtcNow);
+		// This suite (stage 02) only exercises identity/relational shape, never trust - the key
+		// material below is an opaque placeholder, not a real device key. Stage 05
+		// (SessionTests/TestData.cs) seeds realistic trust/key fixtures.
+		SyncDeviceRegistrationEntity device = new(NewId("dev"), account.Id, DateTime.UtcNow, NewId("key"), [1, 2, 3, 4], isFirstDevice: true, approvedByDeviceRegistrationId: null);
 		db.SyncDeviceRegistrations.Add(device);
 		await db.SaveChangesAsync(ct);
 

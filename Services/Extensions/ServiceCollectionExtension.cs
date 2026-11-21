@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 ﻿using Database.Context;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Services.Chat.Interface;
@@ -22,6 +24,13 @@ using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Service;
 using Services.Presence.Interface;
 using Services.Presence.Service;
+using Services.Keys;
+using Services.Keys.Interface;
+using Services.Keys.Service;
+using Services.Sessions.Authorization;
+using Services.Sessions.Interface;
+using Services.Sessions.Service;
+using Services.Hubs.Filters;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
 using Services.Repositories.DeviceNotificationConfig.Interface;
@@ -50,7 +59,15 @@ public static class ServiceCollectionExtension
 	public static IServiceCollection ConfigureAppSettings(this IServiceCollection services, IConfiguration config)
 		=> services
 			.Configure<AppSettings>(config)
-			.Configure<NotificationSettings>(config);
+			.Configure<NotificationSettings>(config)
+			// Stage 05: read-only mounted master-secret directory for the key-protection module
+			// (Services/Keys, stage 04) and its session-replay-cache sibling (Services/Sessions). Per
+			// docs/sync-contract-v1.md: "Master secret is mounted read-only outside PostgreSQL" - only
+			// the directory path and current-version name are configuration, never the key bytes
+			// themselves. Bound from a nested "MasterSecret" section (env vars
+			// MasterSecret__DirectoryPath / MasterSecret__CurrentVersion) rather than flat top-level
+			// keys like AppSettings, to avoid colliding with other top-level configuration names.
+			.Configure<MasterSecretOptions>(config.GetSection("MasterSecret"));
 
 	/// <summary>
 	/// Adds and configures the swagger.
@@ -146,12 +163,29 @@ public static class ServiceCollectionExtension
 			};
 		});
 
+		services.AddSingleton<IAuthorizationHandler, BootstrapAuthorizationHandler>();
+		services.AddScoped<IAuthorizationHandler, AppSessionAuthorizationHandler>();
+
 		return services.AddAuthorization(options =>
 		{
+			// Stage 05: every plain [Authorize] (no named Policy) - every existing controller and
+			// BaseHub - now also requires AppSessionRequirement, i.e. an "app"-purpose token whose
+			// session/device/account are currently trusted right now (Services/Sessions/Interface/ISessionTrustChecker.cs),
+			// not merely a validly-signed, unexpired JWT. This is what stops the legacy bootstrap
+			// token (phone+SMS+PIN only, no device proof) from remaining an unrestricted-access bypass:
+			// it never carries an "app" token_purpose claim, so it fails this requirement's very first
+			// check. The two device-enrollment endpoints use the separate, narrower "Bootstrap" policy
+			// instead (AuthorizationController's SMS endpoints stay [AllowAnonymous], unaffected).
 			options.DefaultPolicy = new AuthorizationPolicyBuilder()
 				.RequireAuthenticatedUser()
 				.RequireClaim(ClaimTypes.NameIdentifier)
+				.AddRequirements(AppSessionRequirement.Instance)
 				.Build();
+
+			options.AddPolicy("Bootstrap", policy => policy
+				.RequireAuthenticatedUser()
+				.RequireClaim(ClaimTypes.NameIdentifier)
+				.AddRequirements(BootstrapRequirement.Instance));
 		});
 	}
 
@@ -178,7 +212,40 @@ public static class ServiceCollectionExtension
 			.AddScoped<IDeviceNotificationConfigRepository, DeviceNotificationConfigRepository>()
 			.AddScoped<INotificationDispatch, NotificationDispatchService>()
 			.AddScoped<IPresenceService, PresenceService>()
-			.AddSignalR()
+			// Stage 05 device/session module (Services/Sessions). Every registration below is
+			// stateless with respect to AppDbContext - every method that needs one takes it as an
+			// explicit parameter from the caller's own scope (matching Services/Keys's "caller owns
+			// the transaction" convention) - except ISessionTrustChecker, which is the sole piece that
+			// injects AppDbContext directly (it has no per-call caller to supply one: it is invoked
+			// from the authorization handler/hub filter) and so must be Scoped, not Singleton.
+			.AddSingleton<TimeProvider>(TimeProvider.System)
+			.AddSingleton<IMasterSecretProvider, FileMasterSecretProvider>()
+			.AddSingleton<IReplayPayloadProtector, AesGcmReplayPayloadProtector>()
+			.AddSingleton<IDeviceProofVerifier, DeviceProofVerifier>()
+			.AddSingleton<IDeviceChallengeService, DeviceChallengeService>()
+			.AddSingleton<ISessionTokenIssuer, SessionTokenIssuer>()
+			.AddSingleton<IRefreshTokenService, RefreshTokenService>()
+			.AddSingleton<IDeviceTrustService, DeviceTrustService>()
+			.AddSingleton<ISyncAccountProvisioningService, SyncAccountProvisioningService>()
+			.AddSingleton<IDeviceEnrollmentCoordinator, DeviceEnrollmentCoordinator>()
+			.AddSingleton<ISessionRefreshCoordinator, SessionRefreshCoordinator>()
+			.AddSingleton<IReplayPayloadCleanupService, ReplayPayloadCleanupService>()
+			// Singleton: one in-memory, per-replica registry of currently-open hub connections for the
+			// whole lifetime of the process - see ISessionConnectionRegistry's own doc comment.
+			.AddSingleton<ISessionConnectionRegistry, SessionConnectionRegistry>()
+			.AddSingleton<ISessionRevocationNotifier, SessionRevocationNotifier>()
+			.AddScoped<ISessionTrustChecker, SessionTrustChecker>()
+			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
+			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
+			// share one timer loop instead of being two near-identical hosted services.
+			.AddHostedService<SessionMaintenanceHostedService>()
+			.AddSignalR(options =>
+				{
+					// Re-checks current trust on every hub invocation (including OnConnectedAsync) -
+					// see Services/Hubs/Filters/SessionGuardHubFilter.cs's own doc comment for why
+					// [Authorize]'s connect-time-only check is not enough on its own.
+					options.AddFilter<SessionGuardHubFilter>();
+				})
 				 .AddMessagePackProtocol(options =>
 				 {
 					 options.SerializerOptions = MessagePackSerializerOptions.Standard
@@ -187,7 +254,8 @@ public static class ServiceCollectionExtension
 							  ContractlessStandardResolver.Instance,
 							  StandardResolver.Instance));
 				 })
-			.Services;
+			.Services
+			.AddScoped<SessionGuardHubFilter>();
 
 	public static IServiceCollection InitializeTwilio(this IServiceCollection service, IConfiguration configuration)
 	{

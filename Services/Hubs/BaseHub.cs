@@ -7,10 +7,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Services.Extensions;
 using Services.Hubs.Models;
 using Services.NotificationDispatch.Interface;
 using Services.Presence.Interface;
+using Services.Sessions;
+using Services.Sessions.Interface;
+using Services.Sessions.Models;
+using Services.Sessions.Service;
 using Services.Utilities.Statics;
 using System.Security.Claims;
 
@@ -54,16 +59,52 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
+		ISessionTrustChecker trustChecker = serviceProvider.GetRequiredService<ISessionTrustChecker>();
+		ISessionConnectionRegistry connectionRegistry = serviceProvider.GetRequiredService<ISessionConnectionRegistry>();
 
 		ClaimsPrincipal? user = Context.User;
 
 		if (user == null)
 			return;
 
-		int receiverId = user.Id();
-		string cacheKey = string.Format(CacheKeys.ConnectionEstablished, receiverId);
-		await cache.SetAsync(cacheKey, true, DateTime.UtcNow.AddHours(1));
+		// The default authorization policy already requires an app-purpose, currently-trusted token
+		// to reach this point (Services.Sessions.Authorization.AppSessionRequirement), so a SessionId
+		// claim is always present here. Joining this group is what lets
+		// Services.Sessions.Service.SessionRevocationNotifier reach exactly this device's own
+		// connections - never the whole account/user - on revocation. Both this and the registration
+		// below happen BEFORE the authoritative recheck further down, so a revoke committing in the gap
+		// between SessionGuardHubFilter's own entry check and here still finds this connection
+		// joinable/abortable rather than a blind spot until the next maintenance sweep.
+		string? sessionId = user.FindFirstValue(SessionClaimTypes.SessionId);
+		bool registered = false;
+		if (sessionId is not null)
+		{
+			await Groups.AddToGroupAsync(Context.ConnectionId, Services.Sessions.Service.SessionRevocationNotifier.GroupName(sessionId));
 
+			// Registers this exact connection so a later revocation can actually abort it even while
+			// idle (ISessionConnectionRegistry), not merely notify it - see that interface's own doc
+			// comment for the same-replica/cross-replica split.
+			string? accountId = user.FindFirstValue(SessionClaimTypes.AccountContextId);
+			string? deviceRegistrationId = user.FindFirstValue(SessionClaimTypes.DeviceRegistrationId);
+			string? trustVersionClaim = user.FindFirstValue(SessionClaimTypes.TrustVersion);
+			string? expClaim = user.FindFirstValue(JwtRegisteredClaimNames.Exp);
+			if (accountId is not null && deviceRegistrationId is not null && long.TryParse(trustVersionClaim, out long trustVersion) && long.TryParse(expClaim, out long expSeconds))
+			{
+				// Captured as a local, not `this.Context`: a Hub instance is transient (see this file's
+				// own top-of-file warning) - closing over `Context` (the HubCallerContext, owned by the
+				// long-lived connection, not by any one transient Hub instance) rather than an implicit
+				// `this` keeps this delegate from pinning this particular Hub instance alive.
+				HubCallerContext callerContext = Context;
+				// ExpiresAtUtc lets SessionMaintenanceHostedService abort an idle connection whose token has
+				// since naturally expired without ever being revoked - a DB-independent, always-available
+				// check (see that class's own doc comment).
+				DateTimeOffset expiresAtUtc = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
+				connectionRegistry.Register(new LiveSessionConnection(callerContext.ConnectionId, accountId, sessionId, deviceRegistrationId, trustVersion, expiresAtUtc, DateTimeOffset.UtcNow, () => callerContext.Abort()));
+				registered = true;
+			}
+		}
+
+		int receiverId = user.Id();
 		DateTime now = DateTime.UtcNow;
 
 		MessageEntity[] undeliveredMessages =
@@ -75,38 +116,64 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 					&& ms.Status == MessageStatus.Received))
 			.ToArrayAsync();
 
-		IEnumerable<IGrouping<int, MessageEntity>> messagesByChats = undeliveredMessages.GroupBy(undeliveredMessage => undeliveredMessage.ChatId);
-
-		var messagesByChatsThenBySenders = messagesByChats.Select(messagesByChat => new
-		{
-			ChatId = messagesByChat.Key,
-			SendersByChat = messagesByChat.GroupBy(message => message.SenderId)
-								.Select(messagesBySender => new
-								{
-									SenderId = messagesBySender.Key,
-									Messages = messagesBySender.ToArray()
-								})
-								.ToArray()
-		})
-		.ToArray();
-
 		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Received, now)).ToArray();
 
-		foreach (var messageByChatThenBySender in messagesByChatsThenBySenders)
+		// Authoritative recheck, locked, immediately before the actual persistence - see
+		// ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's own doc comment. SessionGuardHubFilter's
+		// own check ran once, BEFORE this method even started, and several awaited round trips (group join,
+		// registration, the query above) sit between it and this point - this closes that gap for the
+		// mutation/broadcast below specifically, same treatment SendMessage/ChatEntered already have. The
+		// commit happens strictly BEFORE the broadcast loop - a connection admitted a moment before a
+		// concurrent revoke's commit must never mark-and-publish AFTER that commit.
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, () =>
 		{
-			foreach (var messagesBySender in messageByChatThenBySender.SendersByChat)
-			{
-				IEnumerable<MessageEntity> messages = messagesBySender.Messages;
-				MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageByChatThenBySender.ChatId, receiverId, MessageStatus.Received, now, messages.Select(m => m.Id).ToArray());
+			dbContext.AddRange(messageStatusEntities);
+			return dbContext.SaveChangesAsync();
+		}, Context.ConnectionAborted);
 
-				await Clients
-					.GetUserById(messagesBySender.SenderId)
-					.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+		if (!trust.IsTrusted)
+		{
+			if (registered)
+			{
+				connectionRegistry.Unregister(Context.ConnectionId);
 			}
+			Context.Abort();
+			return;
 		}
 
-		dbContext.AddRange(messageStatusEntities);
-		await dbContext.SaveChangesAsync();
+		string cacheKey = string.Format(CacheKeys.ConnectionEstablished, receiverId);
+		await cache.SetAsync(cacheKey, true, DateTime.UtcNow.AddHours(1));
+
+		if (undeliveredMessages.Length > 0)
+		{
+			IEnumerable<IGrouping<int, MessageEntity>> messagesByChats = undeliveredMessages.GroupBy(undeliveredMessage => undeliveredMessage.ChatId);
+
+			var messagesByChatsThenBySenders = messagesByChats.Select(messagesByChat => new
+			{
+				ChatId = messagesByChat.Key,
+				SendersByChat = messagesByChat.GroupBy(message => message.SenderId)
+									.Select(messagesBySender => new
+									{
+										SenderId = messagesBySender.Key,
+										Messages = messagesBySender.ToArray()
+									})
+									.ToArray()
+			})
+			.ToArray();
+
+			foreach (var messageByChatThenBySender in messagesByChatsThenBySenders)
+			{
+				foreach (var messagesBySender in messageByChatThenBySender.SendersByChat)
+				{
+					IEnumerable<MessageEntity> messages = messagesBySender.Messages;
+					MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageByChatThenBySender.ChatId, receiverId, MessageStatus.Received, now, messages.Select(m => m.Id).ToArray());
+
+					await Clients
+						.GetUserById(messagesBySender.SenderId)
+						.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+				}
+			}
+		}
 
 		await base.OnConnectedAsync();
 	}
@@ -116,6 +183,12 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
+
+		// Safe cleanup regardless of whether this connection ever reached the registration point in
+		// OnConnectedAsync (Unregister is a no-op for an unknown ConnectionId) - every disconnect path
+		// (graceful stop, transport drop, or this.Abort() being called by the registry/filter itself)
+		// ends here, so a connection can never be left registered after it is actually gone.
+		serviceProvider.GetRequiredService<ISessionConnectionRegistry>().Unregister(Context.ConnectionId);
 
 		ClaimsPrincipal? user = Context.User;
 
@@ -149,6 +222,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<INotificationDispatch>();
 		IPresenceService presenceService = serviceProvider.GetRequiredService<IPresenceService>();
 		ILogger<BaseHub> logger = serviceProvider.GetRequiredService<ILogger<BaseHub>>();
+		ISessionTrustChecker trustChecker = serviceProvider.GetRequiredService<ISessionTrustChecker>();
 
 		ClaimsPrincipal? user = Context.User;
 
@@ -157,9 +231,29 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		int senderId = user.Id();
 		int chatId = sendMessageEvent.ChatId;
-		MessageEntity messageEntity = new(sendMessageEvent.Content, senderId, chatId, DateTime.UtcNow);
-		messageEntity = dbContext.Messages.Add(messageEntity).Entity;
-		await dbContext.SaveChangesAsync();
+		MessageEntity? insertedMessage = null;
+
+		// SessionGuardHubFilter already re-checked trust on ENTRY to this invocation, but that alone
+		// cannot stop a request admitted a moment before a concurrent revoke's commit from still
+		// persisting/publishing after it - a plain second read immediately before this insert would
+		// still race the exact same way. TrustedMutation locks the device(+session) row inside the SAME
+		// transaction that performs the insert, which is what actually serializes this write against
+		// DeviceTrustService.RevokeDeviceAsync/RefreshTokenService.RotateAsync for this caller (see
+		// ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's own doc comment for the full
+		// lock-ordering argument).
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, () =>
+		{
+			insertedMessage = dbContext.Messages.Add(new MessageEntity(sendMessageEvent.Content, senderId, chatId, DateTime.UtcNow)).Entity;
+			return dbContext.SaveChangesAsync();
+		}, Context.ConnectionAborted);
+
+		if (!trust.IsTrusted)
+		{
+			Context.Abort();
+			return;
+		}
+
+		MessageEntity messageEntity = insertedMessage!;
 
 		int[] receiversIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync() ?? []).Except([senderId]).ToArray();
 
@@ -223,6 +317,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
+		ISessionTrustChecker trustChecker = serviceProvider.GetRequiredService<ISessionTrustChecker>();
 
 		int chatId = chatEnteredEvent.ChatId;
 		ClaimsPrincipal? user = Context.User;
@@ -245,6 +340,11 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == MessageStatus.Seen))
 			.ToArrayAsync();
 
+		if (unSeenMessages.Length == 0)
+		{
+			return;
+		}
+
 		IEnumerable<IGrouping<int, MessageEntity>> messagesByChats = unSeenMessages.GroupBy(undeliveredMessage => undeliveredMessage.ChatId);
 
 		var messagesByChatsThenBySenders = messagesByChats.Select(messagesByChat => new
@@ -262,6 +362,23 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		MessageStatusEntity[] messageStatusEntities = unSeenMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Seen, now)).ToArray();
 
+		// Same TOCTOU concern/fix as SendMessage above (see ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's
+		// own doc comment): this marks messages Seen and then broadcasts that status to each original
+		// sender below - an authenticated mutation that publishes to ANOTHER user, not merely this
+		// caller's own bookkeeping, so SessionGuardHubFilter's guard-on-entry alone is not enough here
+		// either. Persist is locked+committed first; the broadcast loop only runs after.
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, () =>
+		{
+			dbContext.AddRange(messageStatusEntities);
+			return dbContext.SaveChangesAsync();
+		}, Context.ConnectionAborted);
+
+		if (!trust.IsTrusted)
+		{
+			Context.Abort();
+			return;
+		}
+
 		foreach (var messageByChatThenBySender in messagesByChatsThenBySenders)
 		{
 			foreach (var messagesBySender in messageByChatThenBySender.SendersByChat)
@@ -274,9 +391,6 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 					.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
 			}
 		}
-
-		dbContext.AddRange(messageStatusEntities);
-		await dbContext.SaveChangesAsync();
 	}
 
 	[HubMethodName("chat-exited")]

@@ -1,4 +1,7 @@
-﻿using Database.Entities;
+﻿using System.Net;
+using System.Security.Claims;
+using Database.Context;
+using Database.Entities;
 using Microsoft.AspNetCore.SignalR;
 using Services.Chat.Interface;
 using Services.Chat.Models.CreateChat;
@@ -9,15 +12,20 @@ using Services.NotificationDispatch.Interface;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Friendship.Interface;
 using Services.Repositories.User.Interface;
+using Services.Sessions.Interface;
+using Services.Sessions.Models;
+using Services.Sessions.Service;
 using Services.Utilities;
-using System.Net;
 using static Services.Utilities.Statics.LiveEvents;
 
 namespace Services.Chat.Service;
 
-internal class ChatService(IChatRepository chatRepository, IUserRepository userRepository, IFriendshipRepository friendshipRepository, IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatch) : IChatService
+internal class ChatService(
+	IChatRepository chatRepository, IUserRepository userRepository, IFriendshipRepository friendshipRepository,
+	IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatch,
+	AppDbContext dbContext, ISessionTrustChecker trustChecker) : IChatService
 {
-	public async Task<Result> CreateChat(CreateChatRequest createChatRequest, int chatCreatorId)
+	public async Task<Result> CreateChat(CreateChatRequest createChatRequest, int chatCreatorId, ClaimsPrincipal actingUser)
 	{
 		UserEntity[] userEntities = await userRepository.GetUsers(createChatRequest.UserIds);
 
@@ -26,11 +34,22 @@ internal class ChatService(IChatRepository chatRepository, IUserRepository userR
 		if (validationResult is not null)
 			return validationResult;
 
-		ChatEntity chatEntity = new(createChatRequest.ChatName, userEntities);
-		chatEntity = await chatRepository.AddChat(chatEntity);
-		await chatRepository.SaveChangesAsync();
+		// Re-validated (session/device/trust-version), locked, immediately before the insert actually
+		// commits - the controller's own [Authorize] already ran once, on request entry, but a concurrent
+		// revoke of this exact caller can still commit in the gap between that check and this mutation; see
+		// TrustedMutation's own doc comment. The broadcast below only ever runs after a successful commit.
+		ChatEntity? chatEntity = null;
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, actingUser, async () =>
+		{
+			chatEntity = await chatRepository.AddChat(new ChatEntity(createChatRequest.ChatName, userEntities));
+		});
 
-		ChatCreatedEvent chatCreatedEvent = new(chatEntity.Id, chatEntity.Name, chatEntity.Users.Select(u => u.Id).ToArray());
+		if (!trust.IsTrusted)
+		{
+			return Result.Failure("Session is not currently trusted.", HttpStatusCode.Unauthorized);
+		}
+
+		ChatCreatedEvent chatCreatedEvent = new(chatEntity!.Id, chatEntity.Name, chatEntity.Users.Select(u => u.Id).ToArray());
 		SendEventChatCreated(chatCreatedEvent);
 
 		try

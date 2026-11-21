@@ -44,6 +44,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<SyncChatChangeEntity> SyncChatChanges { get; set; }
 	public DbSet<SyncCatalogEntryEntity> SyncCatalogEntries { get; set; }
 
+	// Device/session/revocation persistence model (plan 05). Additive on top of plan 02's identity
+	// anchors - see SyncDeviceRegistrationEntity/SyncAccountEntity's own doc comments for the columns
+	// this stage adds to those two existing tables.
+	public DbSet<SyncDeviceChallengeEntity> SyncDeviceChallenges { get; set; }
+	public DbSet<SyncDeviceSessionEntity> SyncDeviceSessions { get; set; }
+	public DbSet<SyncRefreshTokenRotationEntity> SyncRefreshTokenRotations { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -75,5 +82,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new SyncUnreadStateConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncChatChangeConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncCatalogEntryConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncDeviceChallengeConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncDeviceSessionConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncRefreshTokenRotationConfiguration());
 	}
 }

@@ -16,6 +16,8 @@ internal class SyncAccountConfiguration : IEntityTypeConfiguration<SyncAccountEn
 
 		builder.Property(e => e.CreatedAtUtc).IsRequired();
 
+		builder.Property(e => e.RevocationBarrierActive).IsRequired().HasDefaultValue(false);
+
 		// Filtered: unique only among currently-active contexts (EndedAtUtc IS NULL), so a legacy
 		// user can have at most one *current* context while any number of ended ones are retained.
 		builder

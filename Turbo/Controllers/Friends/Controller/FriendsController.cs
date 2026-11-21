@@ -17,7 +17,7 @@ public class FriendsController(IFriendshipService friendshipService) : Controlle
 	[HttpPost("add/{targetPhone}")]
 	public async Task<ActionResult<FriendshipDTO>> AddFriend([FromRoute] string targetPhone)
 	{
-		Result<FriendshipDTO> result = await friendshipService.AddFriend(User.Id(), targetPhone);
+		Result<FriendshipDTO> result = await friendshipService.AddFriend(User.Id(), targetPhone, User);
 
 		if (result.IsSuccess)
 			return result.Data;
@@ -37,7 +37,7 @@ public class FriendsController(IFriendshipService friendshipService) : Controlle
 	[HttpPost("request-respond")]
 	public async Task<IActionResult> RespondToFriendRequest([Required] int userId, [Required] FriendshipStatus status)
 	{
-		Result result = await friendshipService.RespondToFriendRequest(userId, User.Id(), status);
+		Result result = await friendshipService.RespondToFriendRequest(userId, User.Id(), status, User);
 		return StatusCode(result.StatusCode, result.Error);
 	}
 }
