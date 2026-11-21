@@ -23,7 +23,7 @@ namespace Turbo.Controllers.Chat.Controller
 		[HttpGet("get-chats")]
 		public async Task<ActionResult<GetChatsResponse[]>> GetChats()
 		{
-			Result<GetChatsResponse[]> result = await chatService.GetChats(User.Id());
+			Result<GetChatsResponse[]> result = await chatService.GetChats(User.Id(), User);
 
 			if (result.IsSuccess)
 				return result.Data;

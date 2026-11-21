@@ -21,6 +21,24 @@ public static class SyncProtocol
     public const int MaxCursorBytes = 2048;
     public const int MaxClockSkewMs = 60000;
 
+    // Recovery KDF (stage 06). docs/sync-contract-v1.md pins the algorithm/output/salt and the
+    // candidate resource parameters ("memory=65536KiB, iterations=3, parallelism=1 require phone
+    // measurement") and requires resource parameters to be "bound before derivation" - the Min/Max
+    // values below are exactly that bound, shared by the client (which refuses to derive outside them)
+    // and the server (which refuses to store outside them).
+    public const int RecoveryKdfSaltBytes = 16;
+    public const int RecoveryKdfOutputBytes = 32;
+    public const int RecoveryKdfVersion = 19;
+    public const int RecoveryKdfCandidateMemoryKiB = 65536;
+    public const int RecoveryKdfCandidateIterations = 3;
+    public const int RecoveryKdfCandidateParallelism = 1;
+    public const int RecoveryKdfMinMemoryKiB = 8192;
+    public const int RecoveryKdfMaxMemoryKiB = 1048576;
+    public const int RecoveryKdfMinIterations = 1;
+    public const int RecoveryKdfMaxIterations = 10;
+    public const int RecoveryKdfMinParallelism = 1;
+    public const int RecoveryKdfMaxParallelism = 4;
+
     public static JsonSerializerOptions CreateJsonOptions()
     {
         var options = new JsonSerializerOptions

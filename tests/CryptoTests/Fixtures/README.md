@@ -12,3 +12,9 @@ are separate git worktrees, so this copy step is manual, not part of either buil
 
 `CrossLanguageFixtureTests.cs` loads this file and verifies the real package with the real
 `MessagePackageVerifier`, and confirms each `tampered.*` variant is rejected.
+
+The same file also carries a `recovery` section (stage 06): a real envelope sealed by the production
+`RecoveryEnvelope.ts` under a FIXED derived key, with the pinned `chat-recovery-v1` AAD.
+`CrossLanguageRecoveryFixtureTests.cs` rebuilds that AAD with `Services/Recovery/RecoveryAad.cs` and
+opens the envelope with .NET's own AesGcm. Native Argon2id derivation is deliberately NOT part of this
+fixture - it stays an on-device integration check (docs/sync-contract-v1.md).

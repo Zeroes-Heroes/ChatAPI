@@ -25,8 +25,17 @@ public interface IDeviceTrustService
 	Task<EnrollmentRequirement> DetermineEnrollmentRequirementAsync(AppDbContext db, string accountId, string deviceRegistrationId, CancellationToken ct = default);
 
 	/// <summary>
+	/// Whether a verified recovery proof alone may authorize this registration right now, i.e. the
+	/// account's sticky barrier is down. Checked BEFORE the sealed recovery envelope is released (a
+	/// blocked device must not even receive openable authorship material) and again, under the commit
+	/// locks, by <see cref="TryTrustPendingDeviceAsync"/> - one rule, two enforcement points.
+	/// </summary>
+	Task<bool> IsRecoverySufficientAsync(AppDbContext db, string accountId, string deviceRegistrationId, CancellationToken ct = default);
+
+	/// <summary>
 	/// Locks the account row, re-runs the exact same decision <see cref="DetermineEnrollmentRequirementAsync"/>
-	/// makes, and - only if it still permits enrollment given <paramref name="hasValidApproval"/> -
+	/// makes, and - only if it still permits enrollment given <paramref name="approval"/>/
+	/// <paramref name="recoveryProofVerified"/> -
 	/// flips the Pending <see cref="Database.Entities.Sync.SyncDeviceRegistrationEntity"/> row to
 	/// Trusted (stamping <see cref="Database.Entities.Sync.SyncDeviceRegistrationEntity.IsFirstDevice"/>/
 	/// <see cref="Database.Entities.Sync.SyncDeviceRegistrationEntity.ApprovedByDeviceRegistrationId"/>
@@ -36,10 +45,24 @@ public interface IDeviceTrustService
 	/// concurrent first-device enrollments for the same account" resolve to exactly one winner (the
 	/// loser re-evaluates under the now-current state and is told DeviceApproval is required).
 	/// </summary>
-	/// <exception cref="DeviceApprovalRequiredException">Approval is required but <paramref name="hasValidApproval"/> is false, or no trusted device exists to approve at all.</exception>
+	/// <param name="approval">
+	/// Null when the caller presents no approval at all. When present, the approving device's CURRENT
+	/// trust state AND that exact session's liveness are both re-read here under row locks (stage 06) -
+	/// neither is taken from the assertion itself, per docs/sync-contract-v1.md's "supplied
+	/// ApprovingSession is not authority". Carrying device, session and "signature verified" as one
+	/// value (<see cref="ApprovalAssertion"/>) rather than separate parameters is deliberate: there is no
+	/// way to name an approver without also naming the session to re-validate.
+	/// </param>
+	/// <param name="recoveryProofVerified">
+	/// The caller verified a chat-recovery-proof-v1 signature against the account's stored recovery
+	/// verification key. Accepted as the alternative to an approval ONLY while the account's sticky
+	/// revocation barrier is down (MESSAGE_SYNC_ANALYSIS.md:153 / docs/sync-contract-v1.md: after
+	/// explicit revocation another trusted device is required "even with valid recovery").
+	/// </param>
+	/// <exception cref="DeviceApprovalRequiredException">Approval is required but absent/unverified, its device or session is no longer current, it is a self-approval, or no trusted device exists to approve at all.</exception>
 	Task<EnrollmentRequirement> TryTrustPendingDeviceAsync(
-		AppDbContext db, string accountId, string deviceRegistrationId, string? approvedByDeviceRegistrationId,
-		bool hasValidApproval, DateTime now, CancellationToken ct = default);
+		AppDbContext db, string accountId, string deviceRegistrationId, ApprovalAssertion? approval,
+		bool recoveryProofVerified, DateTime now, CancellationToken ct = default);
 
 	/// <summary>
 	/// Explicit revocation: ONE transaction (opened and committed internally - see below) that locks the

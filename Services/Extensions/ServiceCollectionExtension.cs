@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.SignalR;
 ﻿using Database.Context;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
@@ -6,6 +5,7 @@ using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -27,6 +27,8 @@ using Services.Presence.Service;
 using Services.Keys;
 using Services.Keys.Interface;
 using Services.Keys.Service;
+using Services.Recovery.Interface;
+using Services.Recovery.Service;
 using Services.Sessions.Authorization;
 using Services.Sessions.Interface;
 using Services.Sessions.Service;
@@ -228,6 +230,16 @@ public static class ServiceCollectionExtension
 			.AddSingleton<IDeviceTrustService, DeviceTrustService>()
 			.AddSingleton<ISyncAccountProvisioningService, SyncAccountProvisioningService>()
 			.AddSingleton<IDeviceEnrollmentCoordinator, DeviceEnrollmentCoordinator>()
+			// Stage 06 (plan/06-recovery.md). The stage-04 key-protection module gets its first
+			// production caller here (the recovery envelope), so it is registered now. The envelope
+			// service injects the Scoped ISessionTrustChecker for its commit-time authority check and is
+			// therefore Scoped itself; the approval service and recovery coordinator stay stateless
+			// Singletons like their stage-05 siblings.
+			.AddSingleton<IMessageKeyProtector, AesGcmMessageKeyProtector>()
+			.AddScoped<IRecoveryEnvelopeService, RecoveryEnvelopeService>()
+			.AddScoped<IRecoveryEnrollmentCoordinator, RecoveryEnrollmentCoordinator>()
+			.AddSingleton<IDeviceApprovalService, DeviceApprovalService>()
+			.AddScoped<IAccountContextBoundary, AccountContextBoundary>()
 			.AddSingleton<ISessionRefreshCoordinator, SessionRefreshCoordinator>()
 			.AddSingleton<IReplayPayloadCleanupService, ReplayPayloadCleanupService>()
 			// Singleton: one in-memory, per-replica registry of currently-open hub connections for the

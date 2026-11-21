@@ -15,5 +15,8 @@ public enum RefreshOutcome { Rotated, Retryable, ReauthenticationRequired, Devic
 public enum SessionControlReason { Expired, Revoked, Draining, DependencyUnavailable }
 public enum OperationErrorCode { Unavailable, RateLimited, SessionExpired, DeviceRevoked, MembershipChanged, Forbidden, InvalidPackage, OperationConflict, UnsupportedVersion, PayloadTooLarge }
 
+/// <summary>Stage 06: result of recording an approval grant for one exact pending registration. Only success shapes - every refusal (unknown/expired request, untrusted approver) is an HTTP failure, never a value here.</summary>
+public enum DeviceApprovalOutcome { Recorded, AlreadyApproved }
+
 public enum PositionExchangeKind { Resume, Acknowledge, Check }
 public enum MembershipEventKind { Added, Left, Removed }

@@ -18,12 +18,16 @@ namespace Turbo.Controllers.DeviceSession.Controller;
 /// "Bootstrap" policy (legacy SMS/PIN credential only, no session yet); the refresh pair is
 /// [AllowAnonymous] because a session legitimately needs to refresh after its access token has expired
 /// (account/device/session are always resolved server-side from SessionId, never trusted from the
-/// request - see <see cref="ISessionRefreshCoordinator"/>); revoke uses the default (app-session)
+/// request - see <see cref="ISessionRefreshCoordinator"/>); revoke requires the default app-session
 /// policy, since only an already-trusted device may revoke a sibling.
+///
+/// Authorization is declared per action, with no class-level [Authorize] (stage 06 fix): ASP.NET Core
+/// ANDs controller and action policies, and this project's app-session and bootstrap requirements are
+/// mutually exclusive token purposes - a class-level default policy made the enrollment pair
+/// unreachable for the bootstrap tokens it exists to serve.
 /// </summary>
 [ApiController]
 [Route("device-session")]
-[Authorize]
 public class DeviceSessionController(
 	AppDbContext db,
 	IDeviceEnrollmentCoordinator enrollmentCoordinator,
@@ -37,7 +41,8 @@ public class DeviceSessionController(
 	[HttpPost("challenge")]
 	public async Task<ActionResult<WireContracts.DeviceChallenge>> RequestChallenge([FromBody] WireContracts.DeviceChallengeRequest request, CancellationToken ct)
 	{
-		if (!Base64Url.TryDecode(request.PublicKey.Spki, out byte[] spki) || !RestrictedAsciiId.IsValid(request.DeviceRegistrationId) || !RestrictedAsciiId.IsValid(request.PublicKey.KeyId))
+		if (!Base64Url.TryDecode(request.PublicKey.Spki, out byte[] spki) || !RestrictedAsciiId.IsValid(request.DeviceRegistrationId)
+			|| !RestrictedAsciiId.IsValid(request.PublicKey.KeyId) || !RestrictedAsciiId.IsValid(request.LocalInstanceId))
 		{
 			return BadRequest();
 		}
@@ -45,12 +50,26 @@ public class DeviceSessionController(
 		try
 		{
 			WireContracts.DeviceChallenge challenge = await enrollmentCoordinator.RequestEnrollmentChallengeAsync(
-				db, User.Id(), request.DeviceRegistrationId, request.PublicKey.KeyId, spki, ct);
+				db, User.Id(), request.DeviceRegistrationId, request.PublicKey.KeyId, spki, request.LocalInstanceId, ct);
 			return challenge;
+		}
+		catch (SessionNotTrustedException)
+		{
+			// The ids presented belong to another account context (see IDeviceChallengeService) - the
+			// device must register a new one, exactly as it does after a fresh start.
+			return Unauthorized();
 		}
 		catch (DeviceApprovalRequiredException)
 		{
 			return StatusCode(StatusCodes.Status403Forbidden, "Another currently trusted device must approve this registration.");
+		}
+		catch (DeviceIdentitySupersededException)
+		{
+			// Exact, authenticated case: the presented ids belong to a context this same identity has
+			// since replaced (a fresh start performed on another install). 409 is the one answer that
+			// entitles the client to its scoped transition - mint new ids and enroll into the CURRENT
+			// context under that context's trust/barrier rules - which no ordinary 401/403 ever does.
+			return Conflict("This device identity belongs to an account context that has been replaced.");
 		}
 	}
 
@@ -85,6 +104,14 @@ public class DeviceSessionController(
 		{
 			return StatusCode(StatusCodes.Status403Forbidden, "Another currently trusted device must approve this registration.");
 		}
+		catch (DeviceIdentitySupersededException)
+		{
+			// Exact, authenticated case: the presented ids belong to a context this same identity has
+			// since replaced (a fresh start performed on another install). 409 is the one answer that
+			// entitles the client to its scoped transition - mint new ids and enroll into the CURRENT
+			// context under that context's trust/barrier rules - which no ordinary 401/403 ever does.
+			return Conflict("This device identity belongs to an account context that has been replaced.");
+		}
 	}
 
 	[AllowAnonymous]
@@ -118,6 +145,7 @@ public class DeviceSessionController(
 		return await refreshCoordinator.RefreshAsync(db, request, ct);
 	}
 
+	[Authorize]
 	[HttpPost("revoke")]
 	public async Task<ActionResult> Revoke([FromBody] WireContracts.RevokeDeviceRequest request, CancellationToken ct)
 	{

@@ -51,6 +51,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<SyncDeviceSessionEntity> SyncDeviceSessions { get; set; }
 	public DbSet<SyncRefreshTokenRotationEntity> SyncRefreshTokenRotations { get; set; }
 
+	// Recovery envelope + device-approval grants (plan 06). Additive on top of plan 05's challenge/
+	// trust model - the approval grant is keyed by the very challenge row it approves.
+	public DbSet<SyncRecoveryEnvelopeEntity> SyncRecoveryEnvelopes { get; set; }
+	public DbSet<SyncDeviceApprovalGrantEntity> SyncDeviceApprovalGrants { get; set; }
+	public DbSet<SyncAuthorKeyHandoffEntity> SyncAuthorKeyHandoffs { get; set; }
+	public DbSet<SyncAuthorKeyEscrowEntity> SyncAuthorKeyEscrows { get; set; }
+	public DbSet<SyncLegacyContextExclusionEntity> SyncLegacyContextExclusions { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -86,5 +94,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new SyncDeviceChallengeConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncDeviceSessionConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncRefreshTokenRotationConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncRecoveryEnvelopeConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncDeviceApprovalGrantConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncAuthorKeyHandoffConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncLegacyContextExclusionConfiguration());
 	}
 }

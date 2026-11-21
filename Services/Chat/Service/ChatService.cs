@@ -23,7 +23,7 @@ namespace Services.Chat.Service;
 internal class ChatService(
 	IChatRepository chatRepository, IUserRepository userRepository, IFriendshipRepository friendshipRepository,
 	IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatch,
-	AppDbContext dbContext, ISessionTrustChecker trustChecker) : IChatService
+	AppDbContext dbContext, ISessionTrustChecker trustChecker, IAccountContextBoundary contextBoundary) : IChatService
 {
 	public async Task<Result> CreateChat(CreateChatRequest createChatRequest, int chatCreatorId, ClaimsPrincipal actingUser)
 	{
@@ -88,7 +88,7 @@ internal class ChatService(
 	}
 
 
-	public async Task<Result<GetChatsResponse[]>> GetChats(int userId)
+	public async Task<Result<GetChatsResponse[]>> GetChats(int userId, ClaimsPrincipal actingUser)
 	{
 		bool doesUserExist = await userRepository.DoesUserExist(userId);
 
@@ -97,7 +97,13 @@ internal class ChatService(
 
 		ChatEntity[] chats = await chatRepository.GetChats(userId);
 
-		GetChatsResponse[] chatsResponse = chats.Select(c => new GetChatsResponse(c.Id, c.Name, c.Users.Select(u => u.Id).ToArray())).ToArray();
+		// Fresh start (plan/06): the legacy tables key on the user id alone, so a new account context
+		// must not list the superseded context's chats. Empty for every account that never started over.
+		IReadOnlySet<int> excluded = await contextBoundary.ExcludedLegacyChatIdsAsync(actingUser);
+
+		GetChatsResponse[] chatsResponse = chats
+			.Where(c => !excluded.Contains(c.Id))
+			.Select(c => new GetChatsResponse(c.Id, c.Name, c.Users.Select(u => u.Id).ToArray())).ToArray();
 
 		return Result<GetChatsResponse[]>.Success(chatsResponse);
 	}

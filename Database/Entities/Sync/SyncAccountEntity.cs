@@ -48,6 +48,24 @@ public class SyncAccountEntity
 	/// </summary>
 	public bool RevocationBarrierActive { get; set; }
 
+	/// <summary>
+	/// Stage 06: the context this one superseded in a fresh start, null for a first/only context. Its
+	/// presence is what marks a context as a new beginning, so the legacy read surfaces apply
+	/// <see cref="SyncLegacyContextExclusionEntity"/> for it. Never used to reach the old context's data.
+	/// </summary>
+	public string? PreviousAccountId { get; set; }
+
+	/// <summary>
+	/// Stage 06: the client-minted fresh-start operation this context was created for, null for every
+	/// other context. The operation id is durable on the device BEFORE the request is sent, so a retry
+	/// after a lost response/process death resolves to the context the first attempt already created
+	/// instead of ending it and chaining another (see
+	/// <see cref="Services.Sessions.Interface.ISyncAccountProvisioningService.StartNewAccountContextAsync"/>).
+	/// Unique per LegacyUserId (IX_SyncAccounts_LegacyUserId_FreshStartOperation), so the resolution is
+	/// scoped to the identity that authenticated it and one operation can never own two contexts.
+	/// </summary>
+	public string? FreshStartOperationId { get; set; }
+
 	public virtual UserEntity LegacyUser { get; set; } = null!;
 	public virtual ICollection<SyncDeviceRegistrationEntity> Devices { get; set; } = [];
 	public virtual ICollection<SyncMembershipEntity> Memberships { get; set; } = [];

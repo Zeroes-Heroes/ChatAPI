@@ -21,7 +21,7 @@ public class DeviceChallengeServiceTests(DatabaseFixture fixture)
 		var (spki, _) = TestData.NewDeviceKey();
 		string deviceId = TestData.NewId("dev");
 
-		DeviceChallenge challenge = await service.IssueEnrollmentChallengeAsync(db, account.Id, deviceId, "key-1", spki, Database.Enums.Sync.ChallengePurpose.Enrollment);
+		DeviceChallenge challenge = await service.IssueEnrollmentChallengeAsync(db, account.Id, deviceId, "key-1", spki, TestData.NewId("inst"), Database.Enums.Sync.ChallengePurpose.Enrollment);
 		Assert.Equal(account.Id, challenge.AccountContextId);
 		Assert.Equal(deviceId, challenge.DeviceRegistrationId);
 
@@ -44,7 +44,7 @@ public class DeviceChallengeServiceTests(DatabaseFixture fixture)
 		var account = await TestData.CreateAccountAsync(db);
 		var (spki, _) = TestData.NewDeviceKey();
 
-		DeviceChallenge challenge = await service.IssueEnrollmentChallengeAsync(db, account.Id, TestData.NewId("dev"), "key-1", spki, Database.Enums.Sync.ChallengePurpose.Enrollment);
+		DeviceChallenge challenge = await service.IssueEnrollmentChallengeAsync(db, account.Id, TestData.NewId("dev"), "key-1", spki, TestData.NewId("inst"), Database.Enums.Sync.ChallengePurpose.Enrollment);
 
 		clock.Advance(TimeSpan.FromMinutes(5).Add(TimeSpan.FromSeconds(1)));
 
@@ -72,7 +72,7 @@ public class DeviceChallengeServiceTests(DatabaseFixture fixture)
 		await using AppDbContext seedDb = fixture.CreateContext();
 		var account = await TestData.CreateAccountAsync(seedDb);
 		var (spki, _) = TestData.NewDeviceKey();
-		DeviceChallenge challenge = await service.IssueEnrollmentChallengeAsync(seedDb, account.Id, TestData.NewId("dev"), "key-1", spki, Database.Enums.Sync.ChallengePurpose.Enrollment);
+		DeviceChallenge challenge = await service.IssueEnrollmentChallengeAsync(seedDb, account.Id, TestData.NewId("dev"), "key-1", spki, TestData.NewId("inst"), Database.Enums.Sync.ChallengePurpose.Enrollment);
 
 		await using AppDbContext dbA = fixture.CreateContext();
 		await using AppDbContext dbB = fixture.CreateContext();

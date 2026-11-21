@@ -12,6 +12,8 @@ public sealed class DeviceProofVerifier : IDeviceProofVerifier
 {
 	private const string ProofDomain = "chat-device-proof-v1";
 	private const string ApprovalDomain = "chat-device-approval-v1";
+	/// <summary>Stage 06: same pinned array, signed with the recovery key from inside the envelope - proof that the recovery secret was actually opened.</summary>
+	private const string RecoveryDomain = "chat-recovery-proof-v1";
 	private const string NistP256Oid = "1.2.840.10045.3.1.7";
 	private const int SignatureLength = 64;
 
@@ -20,6 +22,9 @@ public sealed class DeviceProofVerifier : IDeviceProofVerifier
 
 	public void VerifyDeviceApproval(DeviceProofBinding binding, byte[] approvingDeviceSpki, byte[] signature) =>
 		Verify(ApprovalDomain, binding, approvingDeviceSpki, signature);
+
+	public void VerifyRecoveryProof(DeviceProofBinding binding, byte[] recoveryVerificationSpki, byte[] signature) =>
+		Verify(RecoveryDomain, binding, recoveryVerificationSpki, signature);
 
 	private static void Verify(string domain, DeviceProofBinding binding, byte[] spki, byte[] signature)
 	{

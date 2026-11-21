@@ -49,9 +49,21 @@ public sealed class DeviceTrustService : IDeviceTrustService
 		return new EnrollmentRequirement(EnrollmentRequirementKind.BlockedNoTrustedDeviceAvailable, ChallengePurpose.DeviceApproval);
 	}
 
+	/// <summary>One rule, used both before the sealed envelope is released and again at commit - see the interface.</summary>
+	private static bool RecoverySufficient(EnrollmentRequirementKind kind, bool barrierActive) =>
+		kind != EnrollmentRequirementKind.BlockedNoTrustedDeviceAvailable && !barrierActive;
+
+	public async Task<bool> IsRecoverySufficientAsync(AppDbContext db, string accountId, string deviceRegistrationId, CancellationToken ct = default)
+	{
+		EnrollmentRequirement requirement = await DetermineEnrollmentRequirementAsync(db, accountId, deviceRegistrationId, ct);
+		bool barrierActive = await db.SyncAccounts.AsNoTracking()
+			.Where(a => a.Id == accountId).Select(a => a.RevocationBarrierActive).SingleAsync(ct);
+		return RecoverySufficient(requirement.Kind, barrierActive);
+	}
+
 	public async Task<EnrollmentRequirement> TryTrustPendingDeviceAsync(
-		AppDbContext db, string accountId, string deviceRegistrationId, string? approvedByDeviceRegistrationId,
-		bool hasValidApproval, DateTime now, CancellationToken ct = default)
+		AppDbContext db, string accountId, string deviceRegistrationId, ApprovalAssertion? approval,
+		bool recoveryProofVerified, DateTime now, CancellationToken ct = default)
 	{
 		// Row-lock the account for the duration of this decision+mutation: this is what makes two
 		// concurrent enrollment attempts for the same account resolve to exactly one FirstDevice
@@ -67,6 +79,8 @@ public sealed class DeviceTrustService : IDeviceTrustService
 			.SingleAsync(ct);
 
 		EnrollmentRequirement requirement = await DetermineEnrollmentRequirementAsync(db, accountId, deviceRegistrationId, ct);
+		bool barrierActive = await db.SyncAccounts.AsNoTracking()
+			.Where(a => a.Id == accountId).Select(a => a.RevocationBarrierActive).SingleAsync(ct);
 
 		if (requirement.Kind == EnrollmentRequirementKind.AlreadyTrustedReauthentication)
 		{
@@ -79,23 +93,63 @@ public sealed class DeviceTrustService : IDeviceTrustService
 
 		if (requirement.Kind == EnrollmentRequirementKind.BlockedNoTrustedDeviceAvailable)
 		{
+			// Barrier active and nothing left to approve with: a correct recovery secret is explicitly
+			// NOT enough here (docs/sync-contract-v1.md: "After explicit revocation ... even with valid
+			// recovery"), so the old context stays blocked.
 			throw new DeviceApprovalRequiredException("No currently trusted device is available to approve this registration.");
 		}
 		if (requirement.Kind == EnrollmentRequirementKind.ApprovalRequired)
 		{
-			if (!hasValidApproval || approvedByDeviceRegistrationId is null)
+			// MESSAGE_SYNC_ANALYSIS.md:153 - recovery secret OR approval. The secret is the alternative
+			// only while no explicit revocation has happened on this account; once the barrier is up,
+			// approval is mandatory regardless of the secret.
+			if (recoveryProofVerified && RecoverySufficient(requirement.Kind, barrierActive))
+			{
+				SyncDeviceRegistrationEntity recovered = await db.SyncDeviceRegistrations
+					.SingleAsync(d => d.AccountId == accountId && d.Id == deviceRegistrationId, ct);
+				recovered.TrustState = DeviceTrustState.Trusted;
+				recovered.IsFirstDevice = false;
+				recovered.ApprovedByDeviceRegistrationId = null;
+				return requirement;
+			}
+			if (approval is null || !approval.SignatureVerified)
 			{
 				throw new DeviceApprovalRequiredException("A valid approval from a currently trusted device is required.");
+			}
+			if (approval.ApproverDeviceRegistrationId == deviceRegistrationId)
+			{
+				throw new DeviceApprovalRequiredException("A device cannot approve its own registration.");
 			}
 
 			// "Validate trust at commit; supplied ApprovingSession is not authority" - the approving
 			// device's trust is re-checked here, under the same lock, independent of whatever was true
-			// when its approval signature was produced.
-			bool approverStillTrusted = await db.SyncDeviceRegistrations.AsNoTracking().AnyAsync(
-				d => d.AccountId == accountId && d.Id == approvedByDeviceRegistrationId && d.TrustState == DeviceTrustState.Trusted, ct);
-			if (!approverStillTrusted)
+			// when its approval signature was produced. A real FOR UPDATE lock (stage 06), not a plain
+			// read: the account lock above already serializes every enrollment/revocation for THIS
+			// account, but locking the approver's own row keeps this on the one account -> device ->
+			// session order the rest of the module uses and makes the pair of checks below a single
+			// consistent observation rather than two independent reads.
+			SyncDeviceRegistrationEntity? approver = await db.SyncDeviceRegistrations
+				.FromSqlInterpolated($"""SELECT * FROM "SyncDeviceRegistrations" WHERE "AccountId" = {accountId} AND "Id" = {approval.ApproverDeviceRegistrationId} FOR UPDATE""")
+				.AsNoTracking()
+				.SingleOrDefaultAsync(ct);
+			if (approver is null || approver.TrustState != DeviceTrustState.Trusted)
 			{
 				throw new DeviceApprovalRequiredException("The approving device is no longer currently trusted.");
+			}
+
+			// Stage 06: the approver's own SESSION must still be live too, not merely its device trusted -
+			// RefreshTokenService.RotateAsync's reuse-detection path ends a session without ever touching
+			// the device row, so "device still Trusted" alone would accept an approval from a session that
+			// has since been terminated. Locked after the device row, never before (same tier order).
+			SyncDeviceSessionEntity? approverSession = await db.SyncDeviceSessions
+				.FromSqlInterpolated($"""SELECT * FROM "SyncDeviceSessions" WHERE "Id" = {approval.ApproverSessionId} AND "AccountId" = {accountId} FOR UPDATE""")
+				.AsNoTracking()
+				.SingleOrDefaultAsync(ct);
+			if (approverSession is null
+				|| approverSession.DeviceRegistrationId != approval.ApproverDeviceRegistrationId
+				|| approverSession.EndedAtUtc is not null)
+			{
+				throw new DeviceApprovalRequiredException("The approving session is no longer currently live.");
 			}
 		}
 
@@ -104,7 +158,7 @@ public sealed class DeviceTrustService : IDeviceTrustService
 
 		device.TrustState = DeviceTrustState.Trusted;
 		device.IsFirstDevice = requirement.Kind == EnrollmentRequirementKind.FirstDevice;
-		device.ApprovedByDeviceRegistrationId = requirement.Kind == EnrollmentRequirementKind.ApprovalRequired ? approvedByDeviceRegistrationId : null;
+		device.ApprovedByDeviceRegistrationId = requirement.Kind == EnrollmentRequirementKind.ApprovalRequired ? approval!.ApproverDeviceRegistrationId : null;
 
 		return requirement;
 	}

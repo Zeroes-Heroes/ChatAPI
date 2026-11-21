@@ -107,11 +107,20 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		int receiverId = user.Id();
 		DateTime now = DateTime.UtcNow;
 
+		// Fresh start (plan/06): chats belonging to a superseded account context are not this context's
+		// history, so their undelivered messages are neither delivered nor acknowledged here. Empty for
+		// every account that never started over.
+		IAccountContextBoundary contextBoundary = serviceProvider.GetRequiredService<IAccountContextBoundary>();
+		// Materialized as an array: EF translates Contains over a local array/list, not over the
+		// IReadOnlySet interface method.
+		int[] excludedChatIds = [.. await contextBoundary.ExcludedLegacyChatIdsAsync(user, Context.ConnectionAborted)];
+
 		MessageEntity[] undeliveredMessages =
 			await dbContext.Messages
 			.Where(m =>
 				m.Chat.Users.Select(u => u.Id).Contains(receiverId)
 				&& m.SenderId != receiverId
+				&& !excludedChatIds.Contains(m.ChatId)
 				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId
 					&& ms.Status == MessageStatus.Received))
 			.ToArrayAsync();
@@ -168,14 +177,33 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 					IEnumerable<MessageEntity> messages = messagesBySender.Messages;
 					MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageByChatThenBySender.ChatId, receiverId, MessageStatus.Received, now, messages.Select(m => m.Id).ToArray());
 
-					await Clients
-						.GetUserById(messagesBySender.SenderId)
-						.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+					await SendToLegacyUsersAsync(
+						Clients, contextBoundary, [messagesBySender.SenderId], messageByChatThenBySender.ChatId,
+						LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent, Context.ConnectionAborted);
 				}
 			}
 		}
 
 		await base.OnConnectedAsync();
+	}
+
+	/// <summary>
+	/// Per-user live delivery with the fresh-start boundary applied (plan/06): SignalR addresses users by
+	/// legacy id, which cannot tell a phone's superseded context from its current one.
+	/// </summary>
+	private static async Task SendToLegacyUsersAsync<T>(
+		IHubCallerClients clients, IAccountContextBoundary boundary, int[] legacyUserIds, int legacyChatId,
+		string eventName, T payload, CancellationToken ct)
+	{
+		LegacyRecipients delivery = await boundary.ResolveLegacyRecipientsAsync(legacyUserIds, legacyChatId, ct);
+		if (delivery.UserIds.Count > 0)
+		{
+			await clients.GetUsersByIds([.. delivery.UserIds]).SendAsync(eventName, payload, ct);
+		}
+		if (delivery.ConnectionIds.Count > 0)
+		{
+			await clients.Clients(delivery.ConnectionIds).SendAsync(eventName, payload, ct);
+		}
 	}
 
 	public async override Task OnDisconnectedAsync(Exception? exception)
@@ -233,6 +261,13 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		int chatId = sendMessageEvent.ChatId;
 		MessageEntity? insertedMessage = null;
 
+		// A new account context may never publish into the old context's chats (plan/06 fresh start).
+		IAccountContextBoundary contextBoundary = serviceProvider.GetRequiredService<IAccountContextBoundary>();
+		if (await contextBoundary.IsLegacyChatExcludedAsync(user, chatId, Context.ConnectionAborted))
+		{
+			return;
+		}
+
 		// SessionGuardHubFilter already re-checked trust on ENTRY to this invocation, but that alone
 		// cannot stop a request admitted a moment before a concurrent revoke's commit from still
 		// persisting/publishing after it - a plain second read immediately before this insert would
@@ -264,9 +299,10 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			.GetUserById(senderId)
 			.SendAsync(LiveEvents.NewMessageCreated, newMessageCreatedEvent);
 
-		await Clients
-			.GetUsersByIds(receiversIds)
-			.SendAsync(LiveEvents.NewMessage, newMessageEvent);
+		// Recipient-side context isolation: a phone that started over keeps the same legacy user id, so a
+		// plain user-id fan-out would deliver this old-context chat to its fresh context's connection.
+		await SendToLegacyUsersAsync(
+			Clients, contextBoundary, receiversIds, chatId, LiveEvents.NewMessage, newMessageEvent, Context.ConnectionAborted);
 
 		List<MessageStatusEntity> messageStatusEntities = [];
 
@@ -292,14 +328,21 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			else
 				continue;
 
-			await Clients
-				.GetUserById(senderId)
-				.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+			await SendToLegacyUsersAsync(
+				Clients, contextBoundary, [senderId], chatId,
+				LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent, Context.ConnectionAborted);
 		}
 
 		try
 		{
-			await notificationDispatch.NotificationForNewMessage(receiversIds, senderId, sendMessageEvent.Content, chatId);
+			// Same fresh-start boundary as the live fan-out above, applied to the push: the payload is the
+			// message text and the old chat id, and a device token is only known by legacy user id.
+			IReadOnlyList<int> notifiableIds = await contextBoundary.NotifiableLegacyUserIdsAsync(
+				receiversIds, chatId, Context.ConnectionAborted);
+			if (notifiableIds.Count > 0)
+			{
+				await notificationDispatch.NotificationForNewMessage([.. notifiableIds], senderId, sendMessageEvent.Content, chatId);
+			}
 		}
 		catch (Exception ex)
 		{
@@ -327,6 +370,15 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 
 		int receiverId = user.Id();
+
+		// Same fresh-start boundary as the connect-time scan: an excluded chat is not this context's
+		// history, so entering it must not mark anything seen or reveal its messages.
+		IAccountContextBoundary contextBoundary = serviceProvider.GetRequiredService<IAccountContextBoundary>();
+		if (await contextBoundary.IsLegacyChatExcludedAsync(user, chatId, Context.ConnectionAborted))
+		{
+			return;
+		}
+
 		string cacheKey = string.Format(CacheKeys.ChatEntered, receiverId, chatId);
 		string userCurrentChatIdKey = string.Format(CacheKeys.UserCurrentChatId, receiverId);
 		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
@@ -386,9 +438,9 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				IEnumerable<MessageEntity> messages = messagesBySender.Messages;
 				MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageByChatThenBySender.ChatId, receiverId, MessageStatus.Seen, now, messages.Select(m => m.Id).ToArray());
 
-				await Clients
-					.GetUserById(messagesBySender.SenderId)
-					.SendAsync(LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent);
+				await SendToLegacyUsersAsync(
+					Clients, contextBoundary, [messagesBySender.SenderId], messageByChatThenBySender.ChatId,
+					LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent, Context.ConnectionAborted);
 			}
 		}
 	}

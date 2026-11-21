@@ -20,4 +20,8 @@ public interface IDeviceProofVerifier
 	/// <summary>Verifies an approving trusted device's chat-device-approval-v1 signature over the SAME binding fields as <see cref="VerifyDeviceProof"/> (domain differs; see docs/sync-contract-v1.md), using <paramref name="approvingDeviceSpki"/>.</summary>
 	/// <exception cref="DeviceProofInvalidException">The signature does not verify, is the wrong length, or <paramref name="approvingDeviceSpki"/> is not a valid P-256 key.</exception>
 	void VerifyDeviceApproval(DeviceProofBinding binding, byte[] approvingDeviceSpki, byte[] signature);
+
+	/// <summary>Stage 06: verifies a chat-recovery-proof-v1 signature over the same binding fields with the recovery verification key stored alongside the envelope - the server's only proof that the recovery secret was actually opened.</summary>
+	/// <exception cref="DeviceProofInvalidException">The signature does not verify, is the wrong length, or the key is not a valid P-256 key.</exception>
+	void VerifyRecoveryProof(DeviceProofBinding binding, byte[] recoveryVerificationSpki, byte[] signature);
 }

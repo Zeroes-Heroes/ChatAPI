@@ -14,3 +14,16 @@ public sealed class DeviceApprovalRequiredException(string reason) : SessionModu
 
 /// <summary>The account/device/session this operation targets is not currently trusted (ended session, revoked device, or a trust-version mismatch between the caller's token and the device's current epoch).</summary>
 public sealed class SessionNotTrustedException(string reason) : SessionModuleException($"Session is not currently trusted: {reason}");
+
+/// <summary>Stage 06: the referenced pending registration does not exist for this account, is already approved/consumed, has expired, or the caller is trying to approve its own registration. Deliberately uninformative about which, exactly like <see cref="ChallengeInvalidException"/>.</summary>
+public sealed class ApprovalRequestInvalidException(string reason) : SessionModuleException($"Approval request is invalid: {reason}");
+
+/// <summary>
+/// Stage 06: the presented DeviceRegistrationId/LocalInstanceId is owned by an ENDED context of the
+/// SAME verified identity - a fresh start ("ново начало") this install was not part of. Deliberately
+/// distinct from <see cref="SessionNotTrustedException"/>, which stays the uninformative answer for
+/// every other foreign owner: this one is an authenticated statement about the caller's OWN identity,
+/// and the only thing it entitles the install to is minting new ids and enrolling into the current
+/// context under that context's own trust/barrier rules (it carries no trust over from the ended one).
+/// </summary>
+public sealed class DeviceIdentitySupersededException(string reason) : SessionModuleException($"Device identity belongs to a superseded account context: {reason}");

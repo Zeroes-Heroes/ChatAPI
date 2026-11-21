@@ -18,8 +18,9 @@ public class SyncDeviceChallengeEntity
 	public SyncDeviceChallengeEntity(
 		string id, ChallengePurpose purpose, string accountId, string deviceRegistrationId,
 		string keyId, byte[] publicKeySpki, byte[] nonce, DateTime expiresAtUtc, DateTime createdAtUtc,
-		string? sessionId, string? refreshOperationId)
+		string? sessionId, string? refreshOperationId, string? localInstanceId)
 	{
+		LocalInstanceId = localInstanceId;
 		Id = id;
 		Purpose = purpose;
 		AccountId = accountId;
@@ -63,6 +64,15 @@ public class SyncDeviceChallengeEntity
 
 	/// <summary>Only set for <see cref="ChallengePurpose.SessionBinding"/>; see <see cref="SessionId"/>.</summary>
 	public string? RefreshOperationId { get; set; }
+
+	/// <summary>
+	/// Stage 06 (plan/06-recovery.md): the local SQLite copy the requesting device enrolls for. Set for
+	/// every enrollment/approval challenge, null for <see cref="ChallengePurpose.SessionBinding"/> (a
+	/// refresh binds an existing session, which already has its own local instance). The pinned
+	/// chat-device-approval-v1 array has no field for this, so this column is what makes an approval bind
+	/// the requesting local context too: register rejects any other LocalInstanceId for this challenge.
+	/// </summary>
+	public string? LocalInstanceId { get; set; }
 
 	public virtual SyncAccountEntity Account { get; set; } = null!;
 	public virtual SyncDeviceRegistrationEntity DeviceRegistration { get; set; } = null!;

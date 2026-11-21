@@ -17,6 +17,26 @@ internal class SyncAccountConfiguration : IEntityTypeConfiguration<SyncAccountEn
 		builder.Property(e => e.CreatedAtUtc).IsRequired();
 
 		builder.Property(e => e.RevocationBarrierActive).IsRequired().HasDefaultValue(false);
+		builder.Property(e => e.PreviousAccountId).HasMaxLength(100);
+		builder.Property(e => e.FreshStartOperationId).HasMaxLength(128);
+
+		// Filtered unique: one fresh-start operation owns at most one context per identity, so a retry
+		// of the same operation can only ever resolve to the context it already created (stage 06
+		// idempotency - see SyncAccountEntity.FreshStartOperationId). Null for every ordinary context.
+		builder
+			.HasIndex(e => new { e.LegacyUserId, e.FreshStartOperationId })
+			.IsUnique()
+			.HasFilter("\"FreshStartOperationId\" IS NOT NULL")
+			.HasDatabaseName("IX_SyncAccounts_LegacyUserId_FreshStartOperation");
+
+		// Self-reference to the superseded context (stage 06 fresh start): recorded for the boundary
+		// decision, never traversed to read the old context's data.
+		builder
+			.HasOne<SyncAccountEntity>()
+			.WithMany()
+			.HasForeignKey(e => e.PreviousAccountId)
+			.HasConstraintName("FK_SyncAccounts_PreviousAccountId_SyncAccounts_Id")
+			.OnDelete(DeleteBehavior.Restrict);
 
 		// Filtered: unique only among currently-active contexts (EndedAtUtc IS NULL), so a legacy
 		// user can have at most one *current* context while any number of ended ones are retained.

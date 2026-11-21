@@ -25,9 +25,12 @@ public interface IDeviceChallengeService
 	/// registration id to a different key via a fresh challenge) - the existing row's own key is
 	/// reused for the new challenge instead.
 	/// </summary>
+	/// <param name="localInstanceId">Stage 06: the local SQLite copy this enrollment is for, bound server-side into the challenge row because the pinned approval signature array has no field for it - see <see cref="SyncDeviceChallengeEntity.LocalInstanceId"/>.</param>
+	/// <exception cref="SessionNotTrustedException">The registration id already exists in ANOTHER account context: it is unique server-side and belongs to one context only, so an install that started over must present a new one.</exception>
+	/// <exception cref="DeviceIdentitySupersededException">That other context is an ENDED one of this same verified identity (a fresh start this install missed) - the one case the caller can resolve itself, by minting new ids and enrolling here under this context's own rules.</exception>
 	Task<WireContracts.DeviceChallenge> IssueEnrollmentChallengeAsync(
 		AppDbContext db, string accountId, string deviceRegistrationId, string keyId, byte[] spki,
-		ChallengePurpose purpose, CancellationToken ct = default);
+		string localInstanceId, ChallengePurpose purpose, CancellationToken ct = default);
 
 	/// <summary>Issues a SessionBinding challenge for an existing device, using that device's own currently-registered key (never a key supplied by this call) - see docs/sync-contract-v1.md: "Refresh uses SessionBinding challenges additionally bound server-side to SessionId/RefreshOperationId."</summary>
 	/// <exception cref="SessionNotTrustedException">No such device registration exists for this account.</exception>

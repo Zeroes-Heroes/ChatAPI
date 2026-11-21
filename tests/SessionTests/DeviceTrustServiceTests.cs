@@ -83,7 +83,7 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		long trustVersionBefore = device.TrustVersion;
 
 		EnrollmentRequirement requirement = await _service.TryTrustPendingDeviceAsync(
-			db, account.Id, device.Id, approvedByDeviceRegistrationId: null, hasValidApproval: false, DateTime.UtcNow);
+			db, account.Id, device.Id, approval: null, recoveryProofVerified: false, DateTime.UtcNow);
 		await db.SaveChangesAsync();
 
 		Assert.Equal(EnrollmentRequirementKind.AlreadyTrustedReauthentication, requirement.Kind);
@@ -104,7 +104,7 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		var pending = await TestData.CreatePendingDeviceAsync(db, account, spki, "key-1");
 
 		EnrollmentRequirement requirement = await _service.TryTrustPendingDeviceAsync(
-			db, account.Id, pending.Id, approvedByDeviceRegistrationId: null, hasValidApproval: false, DateTime.UtcNow);
+			db, account.Id, pending.Id, approval: null, recoveryProofVerified: false, DateTime.UtcNow);
 		await db.SaveChangesAsync();
 
 		Assert.Equal(EnrollmentRequirementKind.FirstDevice, requirement.Kind);
@@ -127,7 +127,7 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		var pending = await TestData.CreatePendingDeviceAsync(db, account, newSpki, "key-new");
 
 		await Assert.ThrowsAsync<DeviceApprovalRequiredException>(() =>
-			_service.TryTrustPendingDeviceAsync(db, account.Id, pending.Id, approvedByDeviceRegistrationId: null, hasValidApproval: false, DateTime.UtcNow));
+			_service.TryTrustPendingDeviceAsync(db, account.Id, pending.Id, approval: null, recoveryProofVerified: false, DateTime.UtcNow));
 	}
 
 	[Fact]
@@ -149,7 +149,8 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		var pending = await TestData.CreatePendingDeviceAsync(db, account, newSpki, "key-new");
 
 		await Assert.ThrowsAsync<DeviceApprovalRequiredException>(() =>
-			_service.TryTrustPendingDeviceAsync(db, account.Id, pending.Id, approver.Id, hasValidApproval: true, DateTime.UtcNow));
+			_service.TryTrustPendingDeviceAsync(
+				db, account.Id, pending.Id, new ApprovalAssertion(approver.Id, approverSession.Id, SignatureVerified: true), recoveryProofVerified: false, DateTime.UtcNow));
 	}
 
 	[Fact]
@@ -206,7 +207,7 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		var (newSpki, _) = TestData.NewDeviceKey();
 		var pending = await TestData.CreatePendingDeviceAsync(checkDb, account, newSpki, "key-new");
 		await Assert.ThrowsAsync<DeviceApprovalRequiredException>(() =>
-			_service.TryTrustPendingDeviceAsync(checkDb, account.Id, pending.Id, null, false, DateTime.UtcNow));
+			_service.TryTrustPendingDeviceAsync(checkDb, account.Id, pending.Id, approval: null, recoveryProofVerified: false, DateTime.UtcNow));
 	}
 
 	[Fact]
@@ -327,7 +328,7 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		{
 			try
 			{
-				await svc.TryTrustPendingDeviceAsync(db, account.Id, deviceId, null, false, DateTime.UtcNow);
+				await svc.TryTrustPendingDeviceAsync(db, account.Id, deviceId, approval: null, recoveryProofVerified: false, DateTime.UtcNow);
 				await db.SaveChangesAsync();
 				return true;
 			}
@@ -381,7 +382,7 @@ public class DeviceTrustServiceTests(DatabaseFixture fixture)
 		{
 			try
 			{
-				await enrollService.TryTrustPendingDeviceAsync(enrollDb, account.Id, pending.Id, null, false, DateTime.UtcNow);
+				await enrollService.TryTrustPendingDeviceAsync(enrollDb, account.Id, pending.Id, approval: null, recoveryProofVerified: false, DateTime.UtcNow);
 				await enrollDb.SaveChangesAsync();
 				return true;
 			}

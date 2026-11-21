@@ -16,6 +16,11 @@ internal class SyncDeviceChallengeConfiguration : IEntityTypeConfiguration<SyncD
 			// server-side-bound to a SessionId/RefreshOperationId pair per docs/sync-contract-v1.md.
 			tb.HasCheckConstraint("CK_SyncDeviceChallenges_SessionBindingFieldsMatchPurpose",
 				"(\"Purpose\" = 2 AND \"SessionId\" IS NOT NULL AND \"RefreshOperationId\" IS NOT NULL) OR (\"Purpose\" != 2 AND \"SessionId\" IS NULL AND \"RefreshOperationId\" IS NULL)");
+			// Stage 06: the mirror rule for the local-context binding - every enrollment/approval
+			// challenge carries the requesting local copy, a SessionBinding challenge never does (see
+			// SyncDeviceChallengeEntity.LocalInstanceId's own doc comment).
+			tb.HasCheckConstraint("CK_SyncDeviceChallenges_LocalInstanceMatchesPurpose",
+				"(\"Purpose\" = 2 AND \"LocalInstanceId\" IS NULL) OR (\"Purpose\" != 2 AND \"LocalInstanceId\" IS NOT NULL)");
 		});
 
 		builder.HasKey(e => e.Id);
@@ -31,6 +36,7 @@ internal class SyncDeviceChallengeConfiguration : IEntityTypeConfiguration<SyncD
 		builder.Property(e => e.CreatedAtUtc).IsRequired();
 		builder.Property(e => e.SessionId).HasMaxLength(100);
 		builder.Property(e => e.RefreshOperationId).HasMaxLength(150);
+		builder.Property(e => e.LocalInstanceId).HasMaxLength(100);
 
 		// One-use: the exact 256-bit value can never be issued twice, independent of the ChallengeId
 		// the client sees - belt-and-braces alongside the ConsumedAtUtc atomic-claim column.
