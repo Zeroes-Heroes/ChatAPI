@@ -8,10 +8,14 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Services.Authorship.Interface;
+using Services.Crypto;
 using Services.Extensions;
 using Services.Hubs.Models;
 using Services.Membership.Interface;
 using Services.Membership.Models;
+using Services.Messaging.Interface;
+using Services.Messaging.Models;
 using Services.NotificationDispatch.Interface;
 using Services.Sessions;
 using Services.Sessions.Interface;
@@ -438,6 +442,168 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			})],
 		};
 	}
+
+	/// <summary>
+	/// Stage 11 (plan/11-message-acceptance.md), the three v1 surfaces this stage makes reachable. They
+	/// exchange the pinned contract DTOs as JSON strings encoded with
+	/// <see cref="SyncProtocol.CreateJsonOptions"/>, NOT as hub-serialized objects: the v1 encoding
+	/// (camelCase, exact enum names, the leading <c>outcome</c> discriminator of
+	/// <see cref="OperationResult"/>) has to hold regardless of which protocol this connection negotiated,
+	/// and docs/sync-contract-v1.md forbids the legacy MessagePack resolver for v1 payloads. It also makes
+	/// <see cref="SyncProtocol.MaxHubMessageBytes"/> enforceable on the real wire bytes rather than on a
+	/// deserialized shape. A separately routed/versioned v1 hub is a stage-14 transport concern; the
+	/// encoding, the limits and every authorization rule below are already the v1 ones.
+	///
+	/// Publishing the author context is deliberately its own method: the package is verified against the
+	/// registry, so a key arriving WITH the package it signs could never be an authorization input.
+	/// </summary>
+	[HubMethodName("sync-register-author-key")]
+	public async Task<string?> RegisterAuthorKey(string requestJson)
+	{
+		if (!TryReadSyncRequest(requestJson, out AuthorKeyRegistrationRequest? request)
+			|| request!.Reference is null
+			|| request.ProtocolVersion != SyncProtocol.Version
+			|| !Base64Url.TryDecode(request.Spki, out byte[] spki))
+		{
+			return WriteSync(new SyncFailure(
+				request?.ProtocolVersion is int version && version != SyncProtocol.Version
+					? SyncErrorCode.UnsupportedVersion
+					: SyncErrorCode.InvalidRequest,
+				null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		Result<Services.Authorship.Models.AuthorKeyRegistration> result = await scope.ServiceProvider
+			.GetRequiredService<IAuthorKeyRegistry>()
+			.RegisterAsync(user, request.Reference, spki, Context.ConnectionAborted);
+
+		if (!result.IsSuccess)
+		{
+			if (result.StatusCode == (int)System.Net.HttpStatusCode.Unauthorized)
+			{
+				Context.Abort();
+				return WriteSync(new SyncFailure(SyncErrorCode.SessionExpired, null));
+			}
+
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		return WriteSync(new AuthorKeyRegistrationResult(result.Data.Reference, result.Data.AlreadyRegistered));
+	}
+
+	/// <summary>
+	/// The v1 send. Everything it decides lives in <see cref="IMessageAcceptanceService"/>; this method
+	/// only enforces the transport limit, hands the request over, and - strictly AFTER the commit - sends
+	/// the server ACK back as this invocation's own return value and publishes the status marks the
+	/// acceptance committed. Live delivery of the message itself is the outbox's (stage 12), which this
+	/// transaction has already queued.
+	/// </summary>
+	[HubMethodName("sync-send-message")]
+	public async Task<string?> SyncSendMessage(string requestJson)
+	{
+		if (System.Text.Encoding.UTF8.GetByteCount(requestJson ?? string.Empty) > SyncProtocol.MaxHubMessageBytes)
+		{
+			// "Enforce actual complete wire sizes at send/receive" - refused before anything is parsed.
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		if (!TryReadSyncRequest(requestJson, out SendMessageRequest? request))
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+		Result<AcceptanceOutcome> result = await serviceProvider
+			.GetRequiredService<IMessageAcceptanceService>()
+			.AcceptAsync(user, request!, Context.ConnectionAborted);
+
+		if (!result.IsSuccess)
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		// The same OwnSend marks the legacy send publishes, for the same reason and in the same shape:
+		// they describe committed state, so they are published only after the commit.
+		await PublishStatusMarksAsync(
+			serviceProvider.GetRequiredService<IAccountContextBoundary>(),
+			LegacyChatIdOf(request!.Scope?.ChatId),
+			result.Data.OwnSendSeen);
+
+		string answer = WriteSync(result.Data.Result);
+
+		if (result.Data.SessionUntrusted)
+		{
+			// Same treatment as every other mutating hub method; the answer above is Retryable, never
+			// Rejected, so the client keeps its saved package.
+			Context.Abort();
+		}
+
+		return answer;
+	}
+
+	/// <summary>
+	/// Reconciles an operation whose answer was lost. Authenticates, checks the identity is this device's
+	/// own, and answers the committed result - or <c>Unknown</c>, never <c>Rejected</c>, when nothing is
+	/// committed yet. No membership check at all, by contract.
+	/// </summary>
+	[HubMethodName("sync-query-operation")]
+	public async Task<string?> SyncQueryOperation(string requestJson)
+	{
+		if (!TryReadSyncRequest(requestJson, out OperationQuery? query))
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		Result<AcceptanceOutcome> result = await scope.ServiceProvider
+			.GetRequiredService<IMessageAcceptanceService>()
+			.QueryAsync(user, query!, Context.ConnectionAborted);
+
+		return result.IsSuccess
+			? WriteSync(result.Data.Result)
+			: WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+	}
+
+	/// <summary>The v1 JSON options, built once: the contract's own encoding, never the legacy resolver's.</summary>
+	private static readonly System.Text.Json.JsonSerializerOptions SyncJson = SyncProtocol.CreateJsonOptions();
+
+	private static bool TryReadSyncRequest<T>(string? json, out T? request) where T : class
+	{
+		try
+		{
+			request = json is null ? null : System.Text.Json.JsonSerializer.Deserialize<T>(json, SyncJson);
+			return request is not null;
+		}
+		catch (System.Text.Json.JsonException)
+		{
+			request = null;
+			return false;
+		}
+	}
+
+	private static string WriteSync<T>(T value) => System.Text.Json.JsonSerializer.Serialize(value, SyncJson);
+
+	/// <summary>The legacy chat id behind a v1 ChatId, or 0 when it names no legacy chat - which publishes nothing, because the mark list is then empty anyway.</summary>
+	private static int LegacyChatIdOf(string? chatId) => int.TryParse(chatId, out int legacyChatId) ? legacyChatId : 0;
 
 	[HubMethodName("chat-entered")]
 	public async Task ChatEntered(ChatEnteredEvent chatEnteredEvent)

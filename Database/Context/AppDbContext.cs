@@ -77,6 +77,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<SyncLegacyMessageRecipientStateEntity> SyncLegacyMessageRecipientStates { get; set; }
 	public DbSet<SyncLegacyMessageDeviceStateEntity> SyncLegacyMessageDeviceStates { get; set; }
 
+	// Author-key registry (plan 11): the public half of every author context, keyed by the complete
+	// wire AuthorKeyReference. The one source a signed package may be verified against.
+	public DbSet<SyncAuthorKeyEntity> SyncAuthorKeys { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -132,5 +136,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
 		modelBuilder.ApplyConfiguration(new SyncLegacyMessageRecipientStateConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncLegacyMessageDeviceStateConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncAuthorKeyConfiguration());
 	}
 }

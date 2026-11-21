@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Database.Entities;
+using Database.Entities.Sync;
 using Services.Membership.Models;
 using Services.Statuses.Models;
 using Services.Utilities;
@@ -27,10 +28,12 @@ namespace Services.Statuses.Interface;
 /// through <see cref="Services.Sessions.Service.TrustedMutation"/>, taking the chat's counter row
 /// before any status row, which is the same order every membership mutation uses.
 ///
-/// Everything is expressed over the LEGACY <c>Messages</c> table, because that is where every real
-/// message lives until stage 11; the rows are <c>SyncLegacyMessageRecipientStates</c> /
-/// <c>SyncLegacyMessageDeviceStates</c> and the legacy <c>MessagesStatus</c> log is kept as a
-/// projection for the surfaces that still read it.
+/// Everything the legacy hub produces is expressed over the LEGACY <c>Messages</c> table - the rows are
+/// <c>SyncLegacyMessageRecipientStates</c> / <c>SyncLegacyMessageDeviceStates</c> and the legacy
+/// <c>MessagesStatus</c> log is kept as a projection for the surfaces that still read it. Stage 11 adds
+/// the first message in the SEQUENCE space (<c>SyncMessages</c>), whose unread and OwnSend marks live on
+/// <c>SyncMessageRecipientStates</c> / <c>SyncUnreadStates</c>' sequence pointers; receipts over v1
+/// messages (the device-state half of that space) arrive with the v1 receipt surface in a later stage.
 /// </summary>
 public interface IMessageStatusService
 {
@@ -56,6 +59,23 @@ public interface IMessageStatusService
 	/// <exception cref="InvalidOperationException">No explicit transaction is open on the shared DbContext.</exception>
 	Task<NewMessageStatusEffects> RecordNewMessageAsync(
 		ClaimsPrincipal sender, ChatAccess senderAccess, int legacyChatId, MessageEntity message, CancellationToken ct = default);
+
+	/// <summary>
+	/// The same status half for a v1 (sequence-space) message, called INSIDE the acceptance transaction
+	/// of <see cref="Services.Messaging.Interface.IMessageAcceptanceService"/>, which already holds the
+	/// chat row and has already allocated <paramref name="message"/>'s sequences. It raises every eligible
+	/// recipient's unread and marks the sender's own older incoming messages Seen with reason OwnSend.
+	///
+	/// The OwnSend boundary is <paramref name="message"/>'s own <c>MessageSequence</c> - which is exactly
+	/// what the wire contract returns as <c>OwnSendThroughSequence</c> - so a retry that returns the
+	/// original accepted result returns the original boundary with it, and a later incoming message stays
+	/// unread. Both message spaces are marked: a chat may hold legacy rows written before this stage and
+	/// v1 rows written after it, and the person's "I have read everything older than my own send" is one
+	/// fact, not two.
+	/// </summary>
+	/// <exception cref="InvalidOperationException">No explicit transaction is open on the shared DbContext.</exception>
+	Task<NewMessageStatusEffects> RecordNewSyncMessageAsync(
+		ClaimsPrincipal sender, ChatAccess senderAccess, int legacyChatId, SyncMessageEntity message, CancellationToken ct = default);
 
 	/// <summary>
 	/// The caller has the chat open: every permitted message it has not logically Seen becomes Seen with

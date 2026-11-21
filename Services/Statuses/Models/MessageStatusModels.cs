@@ -64,8 +64,25 @@ public sealed record RecipientStatusMark(
 /// ("При първия успешен commit на собствено ново съобщение по-старите входящи в текущия разрешен обхват
 /// на чата се маркират логически прочетени за подателя"), to be reported to their authors after commit.
 /// </param>
-public sealed record NewMessageStatusEffects(int RecipientCount, IReadOnlyList<RecipientStatusMark> OwnSendSeen)
+/// <param name="UnreadMembershipIds">
+/// Stage 11: the stints whose unread counter this send actually changed, so the caller can journal one
+/// <c>SyncChangeKind.Unread</c> entry per changed row from the counter it already holds. Empty for the
+/// legacy path, which writes no journal entry for a legacy status change (the live event is its
+/// delivery).
+/// </param>
+/// <param name="OwnSendSyncMessageIds">
+/// Stage 11: the v1 messages this send marked Seen/OwnSend for its own sender, for the matching
+/// <c>SyncChangeKind.RecipientState</c> journal entries.
+/// </param>
+public sealed record NewMessageStatusEffects(
+	int RecipientCount,
+	IReadOnlyList<RecipientStatusMark> OwnSendSeen,
+	IReadOnlyList<string> UnreadMembershipIds,
+	IReadOnlyList<string> OwnSendSyncMessageIds)
 {
+	public NewMessageStatusEffects(int recipientCount, IReadOnlyList<RecipientStatusMark> ownSendSeen)
+		: this(recipientCount, ownSendSeen, [], []) { }
+
 	public static readonly NewMessageStatusEffects None = new(0, []);
 }
 

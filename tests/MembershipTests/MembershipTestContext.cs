@@ -12,11 +12,17 @@ using Services.History.Interface;
 using Services.History.Service;
 using Services.Hubs;
 using Microsoft.Extensions.Logging.Abstractions;
+using Services.Authorship.Interface;
 using Services.Authorship.Service;
 using Services.Contacts.Interface;
 using Services.Contacts.Service;
+using Services.Crypto.Service;
+using Services.Keys.Interface;
+using Services.Keys.Service;
 using Services.Membership.Interface;
 using Services.Membership.Service;
+using Services.Messaging.Interface;
+using Services.Messaging.Service;
 using Services.NotificationDispatch.Interface;
 using Services.Sessions;
 using Services.Sessions.Service;
@@ -86,6 +92,34 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			Hub,
 			new NoOpNotificationDispatch(),
 			NullLogger<PersonalRelationService>.Instance,
+			Clock);
+
+	/// <summary>Stage 11's author-key registry, over the REAL access authority, membership writer and trust checker.</summary>
+	public IAuthorKeyRegistry AuthorKeys(AppDbContext db) =>
+		new AuthorKeyRegistry(
+			db, Authority(db), Membership(db),
+			new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()),
+			new SessionTrustChecker(db, Clock), Clock);
+
+	/// <summary>
+	/// Stage 11's acceptance, composed exactly as the production wiring composes it: the real JWS
+	/// verifier, the real author-key registry, the real access authority and membership writer, the real
+	/// key module and the real status service. The only substitution is the master secret, which in
+	/// production is a read-only mounted file (<see cref="Services.Keys.Service.FileMasterSecretProvider"/>,
+	/// covered by its own tests) and which a test process must not depend on the filesystem for.
+	/// </summary>
+	public IMessageAcceptanceService Acceptance(AppDbContext db) =>
+		new MessageAcceptanceService(
+			db,
+			new MessagePackageVerifier(),
+			AuthorKeys(db),
+			Authority(db),
+			Membership(db),
+			new MessageKeyProvisioningService(new AesGcmMessageKeyProtector(new FixedMasterSecretProvider())),
+			new ProtectedMessageKeyStore(),
+			Statuses(db),
+			new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()),
+			new SessionTrustChecker(db, Clock),
 			Clock);
 
 	/// <summary>A legacy message, the only kind that exists today (SyncMessages start in stage 11).</summary>
@@ -270,4 +304,22 @@ internal sealed class RecordingHubContext : IHubContext<BaseHub>
 			return Task.CompletedTask;
 		}
 	}
+}
+
+/// <summary>
+/// The one genuinely unavailable seam for the key module in a test process: in production the master
+/// secret is a read-only mounted FILE (<see cref="Services.Keys.Service.FileMasterSecretProvider"/>,
+/// which has its own tests), never a constant. The protection algorithm, its AAD binding and the
+/// storage format exercised through this provider are the real ones.
+/// </summary>
+internal sealed class FixedMasterSecretProvider : IMasterSecretProvider
+{
+	private static readonly byte[] Key = [.. Enumerable.Range(0, 32).Select(i => (byte)(i * 7 + 3))];
+
+	public string CurrentVersion => "v1";
+
+	// A fresh array each call, exactly as the interface requires - the caller may zero what it gets.
+	public byte[] GetKey(string version) => version == CurrentVersion
+		? [.. Key]
+		: throw new Services.Keys.MasterSecretUnavailableException($"No master secret for version '{version}'.");
 }

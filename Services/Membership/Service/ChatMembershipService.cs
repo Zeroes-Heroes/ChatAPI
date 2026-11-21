@@ -93,6 +93,18 @@ public sealed class ChatMembershipService(
 		await db.SaveChangesAsync(ct);
 	}
 
+	public async Task EnsureProjectedAsync(int legacyChatId, CancellationToken ct = default)
+	{
+		RequireAmbientTransaction(nameof(EnsureProjectedAsync));
+
+		ChatEntity legacyChat = await db.Chats
+			.Include(c => c.Users)
+			.FirstOrDefaultAsync(c => c.Id == legacyChatId, ct)
+			?? throw new ChatMembershipRefusedException("Chat not found.", HttpStatusCode.NotFound);
+
+		await ProjectIfMissingAsync(legacyChat, timeProvider.GetUtcNow().UtcDateTime, ct);
+	}
+
 	public Task<Result<ChatMembershipChange>> AddMembersAsync(
 		ClaimsPrincipal actingUser, int legacyChatId, IReadOnlyCollection<int> targetLegacyUserIds,
 		SharedHistorySelection? sharedHistory = null, CancellationToken ct = default)
@@ -267,20 +279,7 @@ public sealed class ChatMembershipService(
 
 		string chatId = SyncChatIdentity.IdOf(legacyChatId);
 
-		// Serializes concurrent first-time projections of the same pre-stage-07 chat; taken before the
-		// counter row (which does not exist yet for such a chat) and always in this order, so it cannot
-		// deadlock against another membership mutation.
-		await SyncChatIdentity.LockKeyAsync(db, SyncChatIdentity.ProjectionKey(legacyChatId), ct);
-
-		SyncChatEntity? chat = await db.SyncChats.FirstOrDefaultAsync(c => c.Id == chatId, ct);
-		if (chat is null)
-		{
-			// A chat created before this stage carries no membership history: project exactly what the
-			// legacy row says - its current participants, with full history of the chat - so every later
-			// decision comes from the membership model instead of the legacy user list.
-			chat = await ProjectAsync(legacyChatId, legacyChat.Name, [.. legacyChat.Users.Select(u => u.Id)], now, ct);
-			await db.SaveChangesAsync(ct);
-		}
+		SyncChatEntity chat = await ProjectIfMissingAsync(legacyChat, now, ct);
 
 		await SyncChatIdentity.TryLockChatAsync(db, chatId, ct);
 
@@ -822,6 +821,35 @@ public sealed class ChatMembershipService(
 
 			await SendToLegacyUsersAsync([mark.AuthorLegacyUserId], legacyChatId, MessageStatusUpdate, statusUpdate, ct);
 		}
+	}
+
+	/// <summary>
+	/// The lazy projection of a pre-stage-07 chat, shared by every mutation that opens one
+	/// (<see cref="OpenAsync"/>) and by <see cref="EnsureProjectedAsync"/> - one implementation, so the
+	/// projection lock and the "project exactly what the legacy row says" rule cannot diverge between
+	/// callers. Idempotent: a chat that already has a projection is returned untouched.
+	/// </summary>
+	private async Task<SyncChatEntity> ProjectIfMissingAsync(ChatEntity legacyChat, DateTime now, CancellationToken ct)
+	{
+		string chatId = SyncChatIdentity.IdOf(legacyChat.Id);
+
+		// Serializes concurrent first-time projections of the same pre-stage-07 chat; taken before the
+		// counter row (which does not exist yet for such a chat) and always in this order, so it cannot
+		// deadlock against another membership mutation.
+		await SyncChatIdentity.LockKeyAsync(db, SyncChatIdentity.ProjectionKey(legacyChat.Id), ct);
+
+		SyncChatEntity? chat = await db.SyncChats.FirstOrDefaultAsync(c => c.Id == chatId, ct);
+		if (chat is not null)
+		{
+			return chat;
+		}
+
+		// A chat created before stage 07 carries no membership history: project exactly what the legacy
+		// row says - its current participants, with full history of the chat - so every later decision
+		// comes from the membership model instead of the legacy user list.
+		chat = await ProjectAsync(legacyChat.Id, legacyChat.Name, [.. legacyChat.Users.Select(u => u.Id)], now, ct);
+		await db.SaveChangesAsync(ct);
+		return chat;
 	}
 
 	private async Task<SyncChatEntity> ProjectAsync(

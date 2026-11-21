@@ -41,6 +41,18 @@ public interface IChatMembershipService
 	Task ProjectCreatedChatAsync(int legacyChatId, string? chatName, IReadOnlyCollection<int> memberLegacyUserIds, CancellationToken ct = default);
 
 	/// <summary>
+	/// Projects a pre-stage-07 chat on first use if it has none yet, and does nothing otherwise - the
+	/// same lazy projection every mutation here already performs when it opens a chat, exposed for the
+	/// stage-11 paths whose rows point at <c>SyncChats</c>/<c>SyncChatSequenceCounters</c> (a v1 message
+	/// cannot be numbered at all without the chat's counter row). Takes the projection advisory lock, so
+	/// two concurrent first uses cannot both insert; must run inside the caller's own transaction so the
+	/// projection commits with whatever it was needed for.
+	/// </summary>
+	/// <exception cref="Services.Membership.ChatMembershipRefusedException">No such legacy chat.</exception>
+	/// <exception cref="InvalidOperationException">No explicit transaction is open on the shared DbContext.</exception>
+	Task EnsureProjectedAsync(int legacyChatId, CancellationToken ct = default);
+
+	/// <summary>
 	/// Adds participants to a group, effective immediately and without any invitation being accepted.
 	/// Refused for a direct chat (it keeps its personal type), for a caller without an active stint, for
 	/// a participant who is already active (an active member is never re-added to widen their history),

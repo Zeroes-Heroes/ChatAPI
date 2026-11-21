@@ -181,13 +181,15 @@ nothing is lost by it going with the message.
 3. **Per-message visibility (stage 17).** `chat-entered` marks everything permitted; the 50 %/500 ms
    rule, invisible mode and the covering-screen rule are not implemented here. The `Seen` receipt kind
    is the surface stage 17's client will use.
-4. **Sequence-space rows (stage 11+).** `SyncMessageRecipientStates`/`SyncMessageDeviceStates` and the
-   `SyncUnreadStates` sequence pointers stay unwritten until `SyncMessages` exist; stage 11 must write
-   them alongside (or instead of) the legacy rows, and must journal status changes as `SyncChatChanges`
-   (stage 10 writes no journal entry for a legacy status change — the live event is today's delivery).
-5. **Operation idempotence (stage 11).** The `OwnSend` boundary is the committed message's own instant.
-   Once operations carry a `ClientOperationId`, a retried send must reuse the original result and
-   therefore the original boundary.
+4. **Sequence-space rows.** *Done in part by stage 11*: accepting a v1 message writes
+   `SyncMessageRecipientStates` (the sender's `OwnSend` marks), the `SyncUnreadStates` sequence
+   pointers, and `SyncChatChanges` entries of kind `Message`/`Unread`/`RecipientState` —
+   see `docs/message-acceptance.md`. `SyncMessageDeviceStates` and the journalling of *legacy* status
+   changes are still unwritten; the v1 receipt surface that fills them arrives with delivery (stage 12).
+5. **Operation idempotence.** *Done by stage 11*: the `OwnSend` boundary of a v1 send is the accepted
+   message's own `MessageSequence`, which is also what the result returns as `OwnSendThroughSequence`,
+   so a retry that re-answers the original result necessarily re-answers the original boundary. The
+   legacy `send-message` path still has no `ClientOperationId` and is unchanged.
 6. **Pre-stage-07 chats.** A chat with no membership projection has no stint to key a logical row by, so
    a receipt there still writes only the legacy `MessagesStatus` projection (idempotently, monotonically
    and with a derived `StateVersion`) and `unreadCount` is null. The first membership mutation projects

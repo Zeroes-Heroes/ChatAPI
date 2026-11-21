@@ -147,9 +147,12 @@ disposable PostgreSQL 17 and proves:
 
 ## What is explicitly out of scope here
 
-- Message acceptance / the SendMessage hub workflow that would actually call
-  `IMessageKeyProvisioningService` in production (stage 11).
 - Recovery (`Argon2id`-derived recovery key protection) and device enrollment/approval (stages 05/06).
-- Wiring `IMasterSecretProvider`/`IMessageKeyProtector`/etc. into DI (`ServiceCollectionExtension.cs`)
-  - nothing in a later-stage workflow calls these yet, so registering them now would be dead wiring;
-  tests construct them directly.
+
+## Since stage 11
+
+`IMessageKeyProvisioningService` and `IProtectedMessageKeyStore` now have a production caller and are
+registered in DI: `Services/Messaging` stages the protected key row inside the acceptance transaction
+(see `docs/message-acceptance.md`). The module still opens no transaction and still calls no
+`SaveChangesAsync` of its own. `UnwrapForAuthorizedDelivery` remains without a production caller until
+key grants are handed out with delivery (stage 12).

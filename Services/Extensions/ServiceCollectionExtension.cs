@@ -19,6 +19,8 @@ using Services.Chat.Interface;
 using Services.Chat.Service;
 using Services.Contacts.Interface;
 using Services.Contacts.Service;
+using Services.Crypto.Interface;
+using Services.Crypto.Service;
 using Services.DeviceNotificationConfig.Interface;
 using Services.DeviceNotificationConfig.Service;
 using Services.Friendship.Interface;
@@ -35,6 +37,8 @@ using Services.History.Interface;
 using Services.History.Service;
 using Services.Membership.Interface;
 using Services.Membership.Service;
+using Services.Messaging.Interface;
+using Services.Messaging.Service;
 using Services.Recovery.Interface;
 using Services.Recovery.Service;
 using Services.Sessions.Authorization;
@@ -281,6 +285,16 @@ public static class ServiceCollectionExtension
 			// Author rights for a future edit/delete: a pure decision over an already-resolved ChatAccess
 			// and the caller's own claims, with no state and no database of its own.
 			.AddSingleton<IMessageAuthorshipAuthority, MessageAuthorshipAuthority>()
+			// Stage 11 atomic acceptance (plan/11-message-acceptance.md). The stage-04 crypto verifier and
+			// the key module's provisioning/storage halves get their first production callers here, so they
+			// are registered now; both are stateless (the store takes the caller's own AppDbContext per
+			// call), hence Singleton. The registry and the acceptance service write through the CALLER's
+			// own AppDbContext and transaction, so they are Scoped like every other writing module.
+			.AddSingleton<IMessagePackageVerifier, MessagePackageVerifier>()
+			.AddSingleton<IMessageKeyProvisioningService, MessageKeyProvisioningService>()
+			.AddSingleton<IProtectedMessageKeyStore, ProtectedMessageKeyStore>()
+			.AddScoped<IAuthorKeyRegistry, AuthorKeyRegistry>()
+			.AddScoped<IMessageAcceptanceService, MessageAcceptanceService>()
 			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
 			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
 			// share one timer loop instead of being two near-identical hosted services.

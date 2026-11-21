@@ -1288,6 +1288,48 @@ namespace Database.Migrations
                     b.ToTable("SyncLegacyMessageDeviceStates", (string)null);
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncAuthorKeyEntity", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AuthorKeyId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AuthorKeyVersion")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RegisteredByDeviceRegistrationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<byte[]>("Spki")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("AccountId", "ChatId", "AuthorKeyId", "AuthorKeyVersion");
+
+                    b.HasIndex("ChatId", "AccountId");
+
+                    b.HasIndex("AccountId", "RegisteredByDeviceRegistrationId");
+
+                    b.ToTable("SyncAuthorKeys", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncAuthorKeys_SpkiLength", "octet_length(\"Spki\") = 91");
+                        });
+                });
+
             modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
                 {
                     b.Property<string>("MembershipId")
@@ -2780,6 +2822,37 @@ namespace Database.Migrations
                     b.Navigation("Membership");
 
                     b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncAuthorKeyEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncAuthorKeys_AccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncAuthorKeys_ChatId_SyncChats_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncDeviceRegistrationEntity", "RegisteredByDeviceRegistration")
+                        .WithMany()
+                        .HasForeignKey("AccountId", "RegisteredByDeviceRegistrationId")
+                        .HasPrincipalKey("AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncAuthorKeys_AccountId_RegisteredBy_SyncDeviceRegs");
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Chat");
+
+                    b.Navigation("RegisteredByDeviceRegistration");
                 });
 
             modelBuilder.Entity("Database.Entities.MessageEntity", b =>

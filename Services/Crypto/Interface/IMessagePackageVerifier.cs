@@ -20,6 +20,18 @@ public interface IMessagePackageVerifier
 	/// <exception cref="MessageBindingMismatchException">Verified binding does not equal <paramref name="expectedBinding"/>, or violates the payload's own cross-field rules.</exception>
 	VerifiedMessagePackage Verify(string signedPackage, MessageBinding expectedBinding, byte[] authorPublicKeySpki);
 
+	/// <summary>
+	/// The binding the package CLAIMS, with no signature checked and nothing trusted. Its one legitimate
+	/// use is deciding WHICH authorized state to verify against - the author key version a signature must
+	/// be checked with can only be named by the package itself - after which the caller must build
+	/// <paramref name="expectedBinding"/> for <see cref="Verify"/> from its own authorized state (session
+	/// claims, the chat it already authorized, the registry row it already found) and let
+	/// <see cref="Verify"/> be the thing that decides. Never treat anything returned here as a fact about
+	/// the caller, the device, the chat or the author; the structural rules below are shape checks only.
+	/// </summary>
+	/// <exception cref="JwsFormatException">Malformed/non-canonical package shape or payload.</exception>
+	MessageBinding ReadClaimedBinding(string signedPackage);
+
 	/// <summary>base64url SHA-256 of the entire compact JWS ASCII bytes, per docs/sync-contract-v1.md PackageDigest.</summary>
 	string ComputeDigest(string signedPackage);
 }

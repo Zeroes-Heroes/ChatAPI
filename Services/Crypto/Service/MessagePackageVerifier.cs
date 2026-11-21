@@ -103,6 +103,31 @@ public sealed class MessagePackageVerifier : IMessagePackageVerifier
 		return new VerifiedMessagePackage(payload.Binding, payload.Content, nonce, ciphertext, tag, ComputeDigest(signedPackage));
 	}
 
+	/// <summary>
+	/// See <see cref="IMessagePackageVerifier.ReadClaimedBinding"/>. Deliberately NOT a reduced copy of
+	/// <see cref="Verify"/>: it runs the same parse and the same strict shape/identity-token checks, and
+	/// stops exactly where authorization would begin - no signature, no comparison against any expected
+	/// context. The <c>kid</c> is required to match the payload's own author key id, because a package
+	/// whose header and payload disagree names no key at all.
+	/// </summary>
+	public MessageBinding ReadClaimedBinding(string signedPackage)
+	{
+		Models.ParsedJws parsed = CompactJws.Parse(signedPackage);
+		StrictJsonShape.Validate(parsed.PayloadBytes, SignedMessagePayloadShape);
+
+		SignedMessagePayload payload = JsonSerializer.Deserialize<SignedMessagePayload>(parsed.PayloadBytes, SyncProtocol.CreateJsonOptions())
+			?? throw new JwsFormatException("Signed payload deserialized to null.");
+
+		RequireIdentityTokens(payload.Binding);
+
+		if (!string.Equals(parsed.Kid, payload.Binding.AuthorKey.AuthorKeyId, StringComparison.Ordinal))
+		{
+			throw new JwsFormatException("Protected header 'kid' does not match the signed payload's author key id.");
+		}
+
+		return payload.Binding;
+	}
+
 	private static void VerifySignature(Models.ParsedJws parsed, byte[] authorPublicKeySpki)
 	{
 		using ECDsa ecdsa = ECDsa.Create();

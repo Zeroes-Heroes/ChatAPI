@@ -159,9 +159,140 @@ public sealed class MessageStatusService(
 		// обхват на чата се маркират логически прочетени за подателя." The boundary is this message's own
 		// creation instant, so later incoming messages stay unread.
 		IReadOnlyList<RecipientStatusMark> ownSend = await MarkOwnSendSeenAsync(
-			sender, senderAccess, legacyChatId, message.CreatedAt, ct);
+			sender, senderAccess, legacyChatId, message.CreatedAt, syncBoundary: null, markedSyncMessageIds: null, ct);
 
 		return new NewMessageStatusEffects(recipientCount, ownSend);
+	}
+
+	public async Task<NewMessageStatusEffects> RecordNewSyncMessageAsync(
+		ClaimsPrincipal sender, ChatAccess senderAccess, int legacyChatId, SyncMessageEntity message, CancellationToken ct = default)
+	{
+		RequireTransaction(nameof(RecordNewSyncMessageAsync));
+
+		int senderLegacyUserId = sender.Id();
+		IReadOnlyList<ChatParticipantAccess> participants = await accessAuthority.DescribeParticipantsAsync(legacyChatId, ct);
+
+		// Identical rule to the legacy path: everyone whose own windows permit this exact message, author
+		// excluded, counted per PERSON. The windows are evaluated in legacy TIME because that is the only
+		// boundary a stint carries today; a v1 message's CreatedAtUtc is on the same clock.
+		ChatParticipantAccess[] recipients = [.. participants
+			.Where(p => p.LegacyUserId != senderLegacyUserId && p.Access.PermitsMessageAt(message.CreatedAtUtc))];
+
+		int recipientCount = recipients.Select(p => p.LegacyUserId).Distinct().Count();
+		List<string> unreadChanged = [];
+
+		foreach (ChatParticipantAccess recipient in recipients
+			.Where(p => p.AccountContextId is not null)
+			// Ascending membership id, the one order every writer here takes several unread rows in.
+			.OrderBy(p => ActiveStintOf(p.Access), StringComparer.Ordinal))
+		{
+			if (ActiveStintOf(recipient.Access) is not string stintId)
+			{
+				continue;
+			}
+
+			SyncUnreadStateEntity state = await UnreadStateAsync(stintId, message.ChatId, ct);
+			state.Count++;
+			state.OldestUnreadMessageId ??= message.Id;
+			state.LatestUnreadMessageId = message.Id;
+			state.LatestUnreadCreatedAtUtc = message.CreatedAtUtc;
+			state.Version++;
+			unreadChanged.Add(stintId);
+		}
+
+		// One logical effect in both spaces, and one unread recomputation covering both: the legacy marks
+		// use this message's creation instant (legacy rows carry no sequence), the v1 marks its own
+		// MessageSequence.
+		List<string> ownSendSyncMessageIds = [];
+		IReadOnlyList<RecipientStatusMark> ownSend = await MarkOwnSendSeenAsync(
+			sender, senderAccess, legacyChatId, message.CreatedAtUtc, message, ownSendSyncMessageIds, ct);
+
+		if ((ownSendSyncMessageIds.Count > 0 || ownSend.Count > 0) && ActiveStintOf(senderAccess) is string senderStintId)
+		{
+			// Either kind of mark recomputes the sender's own counter (a stint has ONE counter covering
+			// both message spaces), so it owes a journal entry exactly like the recipients'.
+			unreadChanged.Add(senderStintId);
+		}
+
+		return new NewMessageStatusEffects(recipientCount, ownSend, unreadChanged, ownSendSyncMessageIds);
+	}
+
+	/// <summary>
+	/// The sender's own older v1 incoming messages, strictly BELOW this message's own sequence, inside
+	/// its current (non-frozen) windows. Produces nothing to publish: live delivery of a v1 status change
+	/// is the journal's and stage 12's business, not the legacy status event's.
+	/// </summary>
+	private async Task MarkOwnSendSeenInSequenceSpaceAsync(
+		string stintId, string accountId, ChatAccess access, SyncMessageEntity message, List<string> markedMessageIds, CancellationToken ct)
+	{
+		foreach (SyncMessageEntity earlier in await UnseenSyncInCurrentWindowsAsync(access, message.ChatId, accountId, stintId, ct))
+		{
+			// "Повторението на операцията запазва същата граница; по-късните входящи остават непрочетени."
+			if (earlier.MessageSequence >= message.MessageSequence)
+			{
+				continue;
+			}
+
+			SyncMessageRecipientStateEntity state = await SyncRecipientStateAsync(stintId, accountId, message.ChatId, earlier.Id, ct);
+			if (state.SeenAtUtc is not null)
+			{
+				continue;
+			}
+
+			state.SeenAtUtc = message.CreatedAtUtc;
+			state.SeenReason = SyncSeenReason.OwnSend;
+			// Seen implies the person has the message - the same monotonicity the legacy rows keep.
+			state.ReceivedAtUtc ??= message.CreatedAtUtc;
+			state.Version++;
+			markedMessageIds.Add(earlier.Id);
+		}
+	}
+
+	/// <summary>
+	/// The sequence-space counterpart of <see cref="UnseenInCurrentWindowsAsync"/>: v1 messages of this
+	/// chat written by somebody else, inside this stint's still-open windows, with no logical Seen yet.
+	/// </summary>
+	private async Task<IReadOnlyList<SyncMessageEntity>> UnseenSyncInCurrentWindowsAsync(
+		ChatAccess access, string chatId, string accountId, string stintId, CancellationToken ct)
+	{
+		LegacyHistoryWindow[] current = [.. access.Windows.Where(w => !w.IsFrozen)];
+		if (current.Length == 0)
+		{
+			return [];
+		}
+
+		DateTime? from = current.Any(w => w.FromUtc is null) ? null : current.Min(w => w.FromUtc);
+		DateTime? through = current.Any(w => w.ThroughUtc is null) ? null : current.Max(w => w.ThroughUtc);
+
+		List<SyncMessageEntity> candidates = await db.SyncMessages.AsNoTracking()
+			.Where(m => m.ChatId == chatId
+				&& m.SenderAccountId != accountId
+				&& (from == null || m.CreatedAtUtc >= from)
+				&& (through == null || m.CreatedAtUtc <= through)
+				&& !db.SyncMessageRecipientStates.Any(s => s.MessageId == m.Id && s.MembershipId == stintId && s.SeenAtUtc != null))
+			.OrderBy(m => m.MessageSequence)
+			.ToListAsync(ct);
+
+		// The exact per-message rule after the bounded scan: a gap between two windows is covered by no
+		// window at all.
+		return [.. candidates.Where(m => current.Any(w => w.Contains(m.CreatedAtUtc)))];
+	}
+
+	private async Task<SyncMessageRecipientStateEntity> SyncRecipientStateAsync(
+		string membershipId, string accountId, string chatId, string messageId, CancellationToken ct)
+	{
+		SyncMessageRecipientStateEntity? state = db.SyncMessageRecipientStates.Local
+			.FirstOrDefault(s => s.MembershipId == membershipId && s.MessageId == messageId)
+			?? await db.SyncMessageRecipientStates
+				.FirstOrDefaultAsync(s => s.MembershipId == membershipId && s.MessageId == messageId, ct);
+		if (state is not null)
+		{
+			return state;
+		}
+
+		state = new SyncMessageRecipientStateEntity(messageId, chatId, membershipId, accountId, version: 0);
+		db.SyncMessageRecipientStates.Add(state);
+		return state;
 	}
 
 	public async Task<IReadOnlyList<RecipientStatusMark>> MarkHistorySharedSeenAsync(
@@ -600,8 +731,14 @@ public sealed class MessageStatusService(
 	/// The sender's own older incoming messages, inside its CURRENT windows only - "Замразеният архив
 	/// извън новосподеления период запазва статусите си".
 	/// </summary>
+	/// <param name="syncBoundary">
+	/// Set only for a v1 send: the accepted message, whose own <c>MessageSequence</c> is the boundary for
+	/// the sequence-space half of the same marking. Both halves and the single unread recomputation that
+	/// follows them stay in one place, because a stint has exactly one counter covering both spaces.
+	/// </param>
 	private async Task<IReadOnlyList<RecipientStatusMark>> MarkOwnSendSeenAsync(
-		ClaimsPrincipal sender, ChatAccess access, int legacyChatId, DateTime boundaryUtc, CancellationToken ct)
+		ClaimsPrincipal sender, ChatAccess access, int legacyChatId, DateTime boundaryUtc,
+		SyncMessageEntity? syncBoundary, List<string>? markedSyncMessageIds, CancellationToken ct)
 	{
 		if (ActiveStintOf(access) is not string stintId
 			|| sender.FindFirstValue(SessionClaimTypes.AccountContextId) is not string accountId)
@@ -633,7 +770,12 @@ public sealed class MessageStatusService(
 			applied.Add(new AppliedMark(message.SenderId, senderLegacyUserId, IsSeen: true, boundaryUtc, message.Id));
 		}
 
-		if (applied.Count > 0)
+		if (syncBoundary is not null)
+		{
+			await MarkOwnSendSeenInSequenceSpaceAsync(stintId, accountId, access, syncBoundary, markedSyncMessageIds!, ct);
+		}
+
+		if (applied.Count > 0 || markedSyncMessageIds?.Count > 0)
 		{
 			// Same reason as the receipt path: flushed first, so the recomputation sees the marks this
 			// send just made.
@@ -682,6 +824,10 @@ public sealed class MessageStatusService(
 	/// The unread counter of this caller's CURRENT stint, recomputed from what it actually still has
 	/// unread. Deriving it (instead of decrementing) is what makes "намалява еднократно" true under a
 	/// retried receipt, two devices reporting at once, and a restart in between: the value cannot drift.
+	///
+	/// Both message spaces are counted into the ONE counter the stint has: a chat holds legacy rows
+	/// written before stage 11 and v1 rows written after it, and recomputing from only one of them would
+	/// silently erase the other's contribution. Each space keeps its own pair of pointers.
 	/// </summary>
 	private async Task RecomputeUnreadAsync(
 		ChatAccess access, int legacyChatId, int legacyUserId, string accountId, CancellationToken ct)
@@ -691,21 +837,37 @@ public sealed class MessageStatusService(
 			return;
 		}
 
+		string chatId = SyncChatIdentity.IdOf(legacyChatId);
 		IReadOnlyList<MessageEntity> unread = await UnseenInCurrentWindowsAsync(access, legacyChatId, legacyUserId, accountId, ct);
-		SyncUnreadStateEntity state = await UnreadStateAsync(stintId, SyncChatIdentity.IdOf(legacyChatId), ct);
+		IReadOnlyList<SyncMessageEntity> unreadSync = await UnseenSyncInCurrentWindowsAsync(access, chatId, accountId, stintId, ct);
+		SyncUnreadStateEntity state = await UnreadStateAsync(stintId, chatId, ct);
 
 		int? oldest = unread.Count == 0 ? null : unread[0].Id;
 		int? latest = unread.Count == 0 ? null : unread[^1].Id;
-		DateTime? latestAt = unread.Count == 0 ? null : unread[^1].CreatedAt;
+		string? oldestSync = unreadSync.Count == 0 ? null : unreadSync[0].Id;
+		string? latestSync = unreadSync.Count == 0 ? null : unreadSync[^1].Id;
+		long count = unread.Count + unreadSync.Count;
 
-		if (state.Count == unread.Count && state.OldestUnreadLegacyMessageId == oldest && state.LatestUnreadLegacyMessageId == latest)
+		// The newest of whatever is still unread, across both spaces - the one field the sync priority
+		// ordering reads.
+		DateTime? latestAt = unread.Count == 0
+			? unreadSync.Count == 0 ? null : unreadSync[^1].CreatedAtUtc
+			: unreadSync.Count == 0 || unread[^1].CreatedAt >= unreadSync[^1].CreatedAtUtc
+				? unread[^1].CreatedAt
+				: unreadSync[^1].CreatedAtUtc;
+
+		if (state.Count == count
+			&& state.OldestUnreadLegacyMessageId == oldest && state.LatestUnreadLegacyMessageId == latest
+			&& state.OldestUnreadMessageId == oldestSync && state.LatestUnreadMessageId == latestSync)
 		{
 			return;
 		}
 
-		state.Count = unread.Count;
+		state.Count = count;
 		state.OldestUnreadLegacyMessageId = oldest;
 		state.LatestUnreadLegacyMessageId = latest;
+		state.OldestUnreadMessageId = oldestSync;
+		state.LatestUnreadMessageId = latestSync;
 		state.LatestUnreadCreatedAtUtc = latestAt;
 		state.Version++;
 	}
