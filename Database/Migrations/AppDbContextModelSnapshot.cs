@@ -197,6 +197,745 @@ namespace Database.Migrations
                     b.ToTable("MessagesStatus");
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncAccountCatalogCounterEntity", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("NextCatalogSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("AccountId");
+
+                    b.ToTable("SyncAccountCatalogCounters", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncAccountCatalogCounters_NextCatalogSequence_Positive", "\"NextCatalogSequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncAccountEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LegacyUserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LegacyUserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SyncAccounts_LegacyUserId_Active")
+                        .HasFilter("\"EndedAtUtc\" IS NULL");
+
+                    b.ToTable("SyncAccounts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncAccounts_EndedAtUtc_NotBeforeCreatedAtUtc", "\"EndedAtUtc\" IS NULL OR \"EndedAtUtc\" >= \"CreatedAtUtc\"");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncCatalogEntryEntity", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("CatalogSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("AccountId", "CatalogSequence");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("AccountId", "ChatId");
+
+                    b.ToTable("SyncCatalogEntries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncCatalogEntries_CatalogSequence_Positive", "\"CatalogSequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncChatChangeEntity", b =>
+                {
+                    b.Property<string>("ChatId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MembershipEventKind")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReferenceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SecondaryId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.HasKey("ChatId", "ChangeSequence");
+
+                    b.ToTable("SyncChatChanges", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncChatChanges_ChangeSequence_Positive", "\"ChangeSequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncChatEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SyncChats", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncChatSequenceCounterEntity", b =>
+                {
+                    b.Property<string>("ChatId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("NextChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("NextMessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ChatId");
+
+                    b.ToTable("SyncChatSequenceCounters", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncChatSequenceCounters_NextChangeSequence_Positive", "\"NextChangeSequence\" > 0");
+
+                            t.HasCheckConstraint("CK_SyncChatSequenceCounters_NextMessageSequence_Positive", "\"NextMessageSequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncDeviceRegistrationEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("AccountId", "Id")
+                        .HasName("AK_SyncDeviceRegistrations_AccountId_Id");
+
+                    b.ToTable("SyncDeviceRegistrations", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncLocalInstanceEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceRegistrationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("DeviceRegistrationId", "Id")
+                        .HasName("AK_SyncLocalInstances_DeviceRegistrationId_Id");
+
+                    b.ToTable("SyncLocalInstances", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EndReason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EndedByAccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("RightsVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("ChatId", "Id")
+                        .HasName("AK_SyncMemberships_ChatId_Id");
+
+                    b.HasAlternateKey("ChatId", "AccountId", "Id")
+                        .HasName("AK_SyncMemberships_ChatId_AccountId_Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("EndedByAccountId");
+
+                    b.HasIndex("ChatId", "AccountId");
+
+                    b.ToTable("SyncMemberships", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipHistoryGrantEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("FromMessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("FrozenAtChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MembershipId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long?>("ThroughMessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MembershipId", "FromMessageSequence")
+                        .IsUnique();
+
+                    b.ToTable("SyncMembershipHistoryGrants", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncMembershipHistoryGrants_FromMessageSequence_Positive", "\"FromMessageSequence\" > 0");
+
+                            t.HasCheckConstraint("CK_SyncMembershipHistoryGrants_FrozenAtChangeSequence_Positive", "\"FrozenAtChangeSequence\" IS NULL OR \"FrozenAtChangeSequence\" > 0");
+
+                            t.HasCheckConstraint("CK_SyncMembershipHistoryGrants_ThroughMessageSequence_Valid", "\"ThroughMessageSequence\" IS NULL OR \"ThroughMessageSequence\" >= \"FromMessageSequence\"");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RecipientAccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SeenReason")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MembershipId", "MessageId", "RecipientAccountId");
+
+                    b.HasIndex("RecipientAccountId");
+
+                    b.HasIndex("ChatId", "MembershipId");
+
+                    b.HasIndex("ChatId", "MessageId");
+
+                    b.ToTable("SyncMembershipMessageStatusSnapshots", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMetadataSnapshotEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("CapturedAtChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ChatKindAtSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChatName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("MembershipId");
+
+                    b.ToTable("SyncMembershipMetadataSnapshots", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMetadataSnapshotMemberEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ParticipantAccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ParticipantMembershipIdAtSnapshot")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ParticipantStateAtSnapshot")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MembershipId", "ParticipantAccountId");
+
+                    b.HasIndex("ParticipantAccountId");
+
+                    b.HasIndex("ChatId", "MembershipId");
+
+                    b.HasIndex("ChatId", "ParticipantMembershipIdAtSnapshot");
+
+                    b.ToTable("SyncMembershipMetadataSnapshotMembers", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageDeviceStateEntity", b =>
+                {
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DeviceRegistrationId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LocalInstanceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("CiphertextStoredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MembershipId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ObservedSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("MessageId", "DeviceRegistrationId", "LocalInstanceId");
+
+                    b.HasIndex("AccountId", "DeviceRegistrationId");
+
+                    b.HasIndex("ChatId", "AccountId");
+
+                    b.HasIndex("ChatId", "MessageId");
+
+                    b.HasIndex("DeviceRegistrationId", "LocalInstanceId");
+
+                    b.HasIndex("ChatId", "AccountId", "MembershipId");
+
+                    b.ToTable("SyncMessageDeviceStates", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AuthorKeyId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AuthorKeyVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("MessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("OperationKind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackageDigest")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SenderAccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SenderMembershipId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SignedPackage")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("ChatId", "Id")
+                        .HasName("AK_SyncMessages_ChatId_Id");
+
+                    b.HasAlternateKey("ChatId", "SenderAccountId", "Id")
+                        .HasName("AK_SyncMessages_ChatId_SenderAccountId_Id");
+
+                    b.HasIndex("SenderAccountId");
+
+                    b.HasIndex("ChatId", "ChangeSequence")
+                        .IsUnique();
+
+                    b.HasIndex("ChatId", "MessageSequence")
+                        .IsUnique();
+
+                    b.HasIndex("ChatId", "SenderAccountId", "SenderMembershipId");
+
+                    b.ToTable("SyncMessages", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncMessages_ChangeSequence_Positive", "\"ChangeSequence\" > 0");
+
+                            t.HasCheckConstraint("CK_SyncMessages_MessageSequence_Positive", "\"MessageSequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageKeyEntity", b =>
+                {
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("KeyVersion")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<byte[]>("Nonce")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("ProtectedKey")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("Tag")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("MessageId");
+
+                    b.ToTable("SyncMessageKeys", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageRecipientStateEntity", b =>
+                {
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SeenReason")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("MessageId", "MembershipId");
+
+                    b.HasIndex("ChatId", "AccountId");
+
+                    b.HasIndex("ChatId", "MessageId");
+
+                    b.HasIndex("ChatId", "AccountId", "MembershipId");
+
+                    b.ToTable("SyncMessageRecipientStates", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncOperationResultEntity", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DeviceRegistrationId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LocalInstanceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ClientOperationId")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ChatId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ErrorCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackageDigest")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("AccountId", "DeviceRegistrationId", "LocalInstanceId", "ClientOperationId");
+
+                    b.HasIndex("DeviceRegistrationId", "LocalInstanceId");
+
+                    b.HasIndex("ChatId", "AccountId", "MessageId");
+
+                    b.ToTable("SyncOperationResults", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncOutboxEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("LeasedUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MessageId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatId", "MessageId");
+
+                    b.HasIndex("Status", "LeasedUntilUtc", "Id");
+
+                    b.ToTable("SyncOutbox", (string)null);
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncUnreadStateEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("LatestUnreadCreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LatestUnreadMessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OldestUnreadMessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("MembershipId");
+
+                    b.HasIndex("ChatId", "LatestUnreadMessageId");
+
+                    b.HasIndex("ChatId", "MembershipId");
+
+                    b.HasIndex("ChatId", "OldestUnreadMessageId");
+
+                    b.ToTable("SyncUnreadStates", (string)null);
+                });
+
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -368,6 +1107,431 @@ namespace Database.Migrations
                     b.Navigation("Receiver");
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncAccountCatalogCounterEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithOne("CatalogCounter")
+                        .HasForeignKey("Database.Entities.Sync.SyncAccountCatalogCounterEntity", "AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncAccountCatalogCounters_AccountId_SyncAccounts_Id");
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncAccountEntity", b =>
+                {
+                    b.HasOne("Database.Entities.UserEntity", "LegacyUser")
+                        .WithMany()
+                        .HasForeignKey("LegacyUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncAccounts_LegacyUserId_Users_Id");
+
+                    b.Navigation("LegacyUser");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncCatalogEntryEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncCatalogEntries_AccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncCatalogEntries_ChatId_SyncChats_Id");
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Chat");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncChatChangeEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncChatChanges_ChatId_SyncChats_Id");
+
+                    b.Navigation("Chat");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncChatSequenceCounterEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithOne("SequenceCounter")
+                        .HasForeignKey("Database.Entities.Sync.SyncChatSequenceCounterEntity", "ChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncChatSequenceCounters_ChatId_SyncChats_Id");
+
+                    b.Navigation("Chat");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncDeviceRegistrationEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithMany("Devices")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncDeviceRegistrations_AccountId_SyncAccounts_Id");
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncLocalInstanceEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncDeviceRegistrationEntity", "DeviceRegistration")
+                        .WithMany("LocalInstances")
+                        .HasForeignKey("DeviceRegistrationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLocalInstances_DeviceRegistrationId_SyncDeviceRegistrations_Id");
+
+                    b.Navigation("DeviceRegistration");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithMany("Memberships")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMemberships_AccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany("Memberships")
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMemberships_ChatId_SyncChats_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "EndedByAccount")
+                        .WithMany()
+                        .HasForeignKey("EndedByAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncMemberships_EndedByAccountId_SyncAccounts_Id");
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Chat");
+
+                    b.Navigation("EndedByAccount");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipHistoryGrantEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany("HistoryGrants")
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipHistoryGrants_MembershipId_SyncMemberships_Id");
+
+                    b.Navigation("Membership");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "RecipientAccount")
+                        .WithMany()
+                        .HasForeignKey("RecipientAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMessageStatusSnapshots_RecipientAccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMessageStatusSnapshots_ChatId_MembershipId_SyncMemberships");
+
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MessageId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMessageStatusSnapshots_ChatId_MessageId_SyncMessages");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
+
+                    b.Navigation("RecipientAccount");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMetadataSnapshotEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithOne("MetadataSnapshot")
+                        .HasForeignKey("Database.Entities.Sync.SyncMembershipMetadataSnapshotEntity", "MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMetadataSnapshots_MembershipId_SyncMemberships_Id");
+
+                    b.Navigation("Membership");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMetadataSnapshotMemberEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipMetadataSnapshotEntity", "MetadataSnapshot")
+                        .WithMany("Members")
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMetadataSnapshotMembers_MembershipId_SyncMembershipMetadataSnapshots_MembershipId");
+
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "ParticipantAccount")
+                        .WithMany()
+                        .HasForeignKey("ParticipantAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMetadataSnapshotMembers_ParticipantAccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipMetadataSnapshotMembers_ChatId_MembershipId_SyncMemberships");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "ParticipantMembership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "ParticipantMembershipIdAtSnapshot")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncMembershipMetadataSnapshotMembers_ChatId_ParticipantMembershipId_SyncMemberships");
+
+                    b.Navigation("MetadataSnapshot");
+
+                    b.Navigation("ParticipantAccount");
+
+                    b.Navigation("ParticipantMembership");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageDeviceStateEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncDeviceRegistrationEntity", "DeviceRegistration")
+                        .WithMany()
+                        .HasForeignKey("AccountId", "DeviceRegistrationId")
+                        .HasPrincipalKey("AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageDeviceStates_AccountId_DeviceRegistrationId_SyncDeviceRegistrations");
+
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MessageId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageDeviceStates_ChatId_MessageId_SyncMessages");
+
+                    b.HasOne("Database.Entities.Sync.SyncLocalInstanceEntity", "LocalInstance")
+                        .WithMany()
+                        .HasForeignKey("DeviceRegistrationId", "LocalInstanceId")
+                        .HasPrincipalKey("DeviceRegistrationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageDeviceStates_DeviceRegistrationId_LocalInstanceId_SyncLocalInstances");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "AccountId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageDeviceStates_ChatId_AccountId_MembershipId_SyncMemberships");
+
+                    b.Navigation("DeviceRegistration");
+
+                    b.Navigation("LocalInstance");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany("Messages")
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessages_ChatId_SyncChats_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "SenderAccount")
+                        .WithMany()
+                        .HasForeignKey("SenderAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessages_SenderAccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "SenderMembership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "SenderAccountId", "SenderMembershipId")
+                        .HasPrincipalKey("ChatId", "AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessages_ChatId_SenderAccountId_SenderMembershipId_SyncMemberships");
+
+                    b.Navigation("Chat");
+
+                    b.Navigation("SenderAccount");
+
+                    b.Navigation("SenderMembership");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageKeyEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
+                        .WithOne("Key")
+                        .HasForeignKey("Database.Entities.Sync.SyncMessageKeyEntity", "MessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageKeys_MessageId_SyncMessages_Id");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageRecipientStateEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MessageId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageRecipientStates_ChatId_MessageId_SyncMessages");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "AccountId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMessageRecipientStates_ChatId_AccountId_MembershipId_SyncMemberships");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncOperationResultEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncOperationResults_AccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncDeviceRegistrationEntity", "DeviceRegistration")
+                        .WithMany()
+                        .HasForeignKey("AccountId", "DeviceRegistrationId")
+                        .HasPrincipalKey("AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncOperationResults_AccountId_DeviceRegistrationId_SyncDeviceRegistrations");
+
+                    b.HasOne("Database.Entities.Sync.SyncLocalInstanceEntity", "LocalInstance")
+                        .WithMany()
+                        .HasForeignKey("DeviceRegistrationId", "LocalInstanceId")
+                        .HasPrincipalKey("DeviceRegistrationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncOperationResults_DeviceRegistrationId_LocalInstanceId_SyncLocalInstances");
+
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "AccountId", "MessageId")
+                        .HasPrincipalKey("ChatId", "SenderAccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncOperationResults_ChatId_AccountId_MessageId_SyncMessages");
+
+                    b.Navigation("Account");
+
+                    b.Navigation("DeviceRegistration");
+
+                    b.Navigation("LocalInstance");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncOutboxEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MessageId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncOutbox_ChatId_MessageId_SyncMessages");
+
+                    b.Navigation("Chat");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncUnreadStateEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithOne("Unread")
+                        .HasForeignKey("Database.Entities.Sync.SyncUnreadStateEntity", "MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncUnreadStates_MembershipId_SyncMemberships_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "LatestUnreadMessage")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "LatestUnreadMessageId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncUnreadStates_ChatId_LatestUnreadMessageId_SyncMessages");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncUnreadStates_ChatId_MembershipId_SyncMemberships");
+
+                    b.HasOne("Database.Entities.Sync.SyncMessageEntity", "OldestUnreadMessage")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "OldestUnreadMessageId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncUnreadStates_ChatId_OldestUnreadMessageId_SyncMessages");
+
+                    b.Navigation("LatestUnreadMessage");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("OldestUnreadMessage");
+                });
+
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
                 {
                     b.HasOne("Database.Entities.DeviceNotificationConfigEntity", "DeviceNotificationsConfig")
@@ -401,6 +1565,48 @@ namespace Database.Migrations
             modelBuilder.Entity("Database.Entities.MessageEntity", b =>
                 {
                     b.Navigation("MessageStatusEntities");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncAccountEntity", b =>
+                {
+                    b.Navigation("CatalogCounter");
+
+                    b.Navigation("Devices");
+
+                    b.Navigation("Memberships");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncChatEntity", b =>
+                {
+                    b.Navigation("Memberships");
+
+                    b.Navigation("Messages");
+
+                    b.Navigation("SequenceCounter");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncDeviceRegistrationEntity", b =>
+                {
+                    b.Navigation("LocalInstances");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipEntity", b =>
+                {
+                    b.Navigation("HistoryGrants");
+
+                    b.Navigation("MetadataSnapshot");
+
+                    b.Navigation("Unread");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMetadataSnapshotEntity", b =>
+                {
+                    b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMessageEntity", b =>
+                {
+                    b.Navigation("Key");
                 });
 
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>
