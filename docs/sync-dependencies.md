@@ -11,7 +11,7 @@ Protocol types introduce no runtime packages. Existing manifests remain unchange
 | react-native-nitro-modules | 0.33.2 | Exact dev version in Quick Crypto 1.1.8; candidate for this app. |
 | react-native-quick-base64 | 3.0.0 | Candidate satisfying peer floor; native graph unverified. |
 | react-native-keychain | 10.0.0 | Release min Android SDK 23; app minSdk 24. Native behavior unverified. |
-| RabbitMQ.Client | 7.2.2 | Published net8.0 target; restore/build and broker integration pending. |
+| RabbitMQ.Client | 7.2.2 | Published net8.0 target; restore/build verified in an isolated probe (2026-10-28); production in-project reference and broker integration remain pending. |
 | Built-in .NET AesGcm/ECDsa | net8.0 / runtime 8.0.30 | Executed installed Linux implementations in cross-runtime probe. |
 | Argon2id | Quick Crypto 1.1.8 | Candidate client derivation; no server Argon2 dependency since server does not receive password. Native API/performance unverified. |
 
@@ -24,6 +24,8 @@ Official sources checked 2026-10-25:
 - [RabbitMQ.Client 7.2.2 frameworks](https://www.nuget.org/packages/RabbitMQ.Client/7.2.2)
 
 Current app Podfile pins iOS 15.6; Quick Crypto derives its minimum from React Native's CocoaPods helper. Resolve the full pods graph before declaring compatibility. This change does not silently raise native deployment targets or install unverified packages.
+
+RabbitMQ.Client 7.2.2 evidence note (verified 2026-10-28): a disposable, isolated net8.0 console probe (`rabbitmq-probe/Program.cs`, `rabbitmq-probe/rabbitmq-probe.csproj`), not part of any ChatAPI project, referenced the real 7.x async API (`ConnectionFactory`, `CreateConnectionAsync`, `CreateChannelAsync`, `QueueDeclareAsync`, `BasicPublishAsync`) and restored/built with zero errors against net8.0. This proves package restore and source compilation against the actual 7.x surface only. The probe program was never executed, so no TCP connection, AMQP handshake, or RabbitMQ broker was reached, and no ChatAPI project references the package yet. Broker integration and in-project reference remain pending.
 
 ## Executed checks
 
