@@ -26,6 +26,7 @@ using Services.Sessions.Service;
 using Services.Statuses.Interface;
 using Services.Statuses.Models;
 using Services.Sync.Contracts;
+using Services.Sync.Interface;
 using Services.Utilities;
 using Services.Utilities.Statics;
 using System.Security.Claims;
@@ -602,6 +603,142 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		return result.IsSuccess
 			? WriteSync(result.Data.Result)
 			: WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+	}
+
+	/// <summary>
+	/// Stage 13 (plan/13-history-api.md): the handshake that fixes this connection's sync, the
+	/// enumeration of what it fixed, the position exchanges and the readiness they produce. Same v1 JSON
+	/// string encoding as the stage-11 methods above.
+	///
+	/// "Handshake authenticates SessionContext and installs connection addressing before fixing
+	/// boundaries": the device's live address (<see cref="DeliveryGroups.ForDevice"/>) is joined in
+	/// <see cref="OnConnectedAsync"/> from this connection's OWN claims and re-asserted here - the join
+	/// is idempotent - BEFORE the service fixes anything, so a boundary set can never be fixed for a
+	/// connection that live delivery could not reach.
+	/// </summary>
+	[HubMethodName("sync-handshake")]
+	public async Task<string?> SyncHandshake(string requestJson)
+	{
+		if (!TryReadSyncRequest(requestJson, out SyncHandshakeRequest? request))
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		string? deviceRegistrationId = user.FindFirstValue(SessionClaimTypes.DeviceRegistrationId);
+		if (deviceRegistrationId is null)
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.SessionExpired, null));
+		}
+
+		await Groups.AddToGroupAsync(Context.ConnectionId, DeliveryGroups.ForDevice(deviceRegistrationId));
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		Services.Sync.Models.SyncResult<SyncHandshakeResponse> result = await scope.ServiceProvider
+			.GetRequiredService<ISyncSessionService>()
+			.HandshakeAsync(user, Context.ConnectionId, request!, Context.ConnectionAborted);
+
+		return AnswerSync(result);
+	}
+
+	/// <summary>One bounded page of the fixed chat/member boundary set; the cursor comes from the handshake or from the previous page.</summary>
+	// Named GetSyncBoundaryPage, not SyncBoundaryPage: a method whose name equals the contract type this
+	// body uses would hide that type inside this class (same reason as ReportMessageReceipts above). The
+	// wire name clients call is unchanged.
+	[HubMethodName("sync-boundary-page")]
+	public async Task<string?> GetSyncBoundaryPage(string requestJson)
+	{
+		if (!TryReadSyncRequest(requestJson, out SyncBoundaryPageRequest? request))
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		Services.Sync.Models.SyncResult<SyncBoundaryPage> result = await scope.ServiceProvider
+			.GetRequiredService<ISyncSessionService>()
+			.GetBoundaryPageAsync(user, request!, Context.ConnectionAborted);
+
+		return AnswerSync(result);
+	}
+
+	/// <summary>One batch of a Resume/Acknowledge/Check exchange. The connection is this invocation's own, never the payload's claim about it.</summary>
+	[HubMethodName("sync-exchange-positions")]
+	public async Task<string?> SyncExchangePositions(string requestJson)
+	{
+		if (System.Text.Encoding.UTF8.GetByteCount(requestJson ?? string.Empty) > SyncProtocol.MaxHubMessageBytes)
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		if (!TryReadSyncRequest(requestJson, out SyncPositionBatch? batch))
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		Services.Sync.Models.SyncResult<SyncPositionBatchResult> result = await scope.ServiceProvider
+			.GetRequiredService<ISyncSessionService>()
+			.ExchangePositionsAsync(user, Context.ConnectionId, batch!, Context.ConnectionAborted);
+
+		return AnswerSync(result);
+	}
+
+	/// <summary>
+	/// This session's global readiness. Pull-based on purpose: readiness is derived from committed
+	/// acknowledgements, so the device asks for it when it matters rather than depending on an event it
+	/// might have missed - and a connection other than the one the session was fixed on is never ready.
+	/// </summary>
+	[HubMethodName("sync-readiness")]
+	public async Task<string?> SyncReadinessState(string syncSessionId)
+	{
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		Services.Sync.Models.SyncResult<SyncReadiness> result = await scope.ServiceProvider
+			.GetRequiredService<ISyncSessionService>()
+			.GetReadinessAsync(user, Context.ConnectionId, syncSessionId, Context.ConnectionAborted);
+
+		return AnswerSync(result);
+	}
+
+	/// <summary>
+	/// The v1 answer or its failure, in the one encoding. A caller that stopped being trusted has its
+	/// connection aborted as well - the same treatment every other v1 method gives.
+	/// </summary>
+	private string AnswerSync<T>(Services.Sync.Models.SyncResult<T> result) where T : class
+	{
+		if (result.Failure is SyncFailure failure)
+		{
+			if (failure.Code == SyncErrorCode.SessionExpired)
+			{
+				Context.Abort();
+			}
+
+			return WriteSync(failure);
+		}
+
+		return WriteSync(result.Value!);
 	}
 
 	/// <summary>The v1 JSON options, built once: the contract's own encoding, never the legacy resolver's.</summary>

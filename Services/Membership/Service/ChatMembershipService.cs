@@ -579,12 +579,14 @@ public sealed class ChatMembershipService(
 		List<SyncMembershipHistoryGrantEntity> open = await db.SyncMembershipHistoryGrants
 			.Where(g => g.MembershipId == stint.Id && g.ThroughMessageSequence == null)
 			.ToListAsync(ct);
+		List<SyncMembershipHistoryGrantEntity> justClosed = [];
 		foreach (SyncMembershipHistoryGrantEntity grant in open)
 		{
 			if (lastMessageSequence >= grant.FromMessageSequence)
 			{
 				grant.ThroughMessageSequence = lastMessageSequence;
 				grant.FrozenAtChangeSequence = changeSequence;
+				justClosed.Add(grant);
 			}
 			else
 			{
@@ -595,8 +597,9 @@ public sealed class ChatMembershipService(
 		// Stage 08: the archive itself - the chat as it looked and the public statuses as they stood at
 		// this exact moment - captured in the SAME transaction, under the SAME chat lock. Anything
 		// committed after this point belongs to the chat, not to this archive; nothing committed before
-		// it can be missed.
-		await CaptureArchiveAsync(context, stint, changeSequence, ct);
+		// it can be missed. The ranges just closed above travel with it: they exist only in the change
+		// tracker at this point, so a query would not see them.
+		await CaptureArchiveAsync(context, stint, changeSequence, justClosed, ct);
 
 		await AppendCatalogAsync(stint.AccountId, context.Chat.Id, stint.Id, context.Now, ct);
 	}
@@ -610,7 +613,11 @@ public sealed class ChatMembershipService(
 	/// достъпа му" would be false.
 	/// </summary>
 	private async Task CaptureArchiveAsync(
-		MutationContext context, SyncMembershipEntity stint, long changeSequence, CancellationToken ct)
+		MutationContext context,
+		SyncMembershipEntity stint,
+		long changeSequence,
+		IReadOnlyList<SyncMembershipHistoryGrantEntity> justClosedGrants,
+		CancellationToken ct)
 	{
 		db.SyncMembershipMetadataSnapshots.Add(new SyncMembershipMetadataSnapshotEntity(
 			stint.Id, context.Chat.Name, context.Chat.Kind, changeSequence, context.Now));
@@ -633,6 +640,27 @@ public sealed class ChatMembershipService(
 				stint.Id, context.Chat.Id, other.AccountId, other.Id, SyncMembershipState.Active));
 		}
 
+		// Who was entitled to what at this instant - the denominator both status passes below need.
+		IReadOnlyList<ChatParticipantAccess> participants = await accessAuthority.DescribeParticipantsAsync(context.LegacyChat.Id, ct);
+
+		// The two message spaces are archived independently: a chat whose messages are all v1 has no
+		// legacy rows at all, and one that predates stage 11 has no sequence-space rows, so neither
+		// pass's empty result may stop the other.
+		await CaptureLegacyStatusArchiveAsync(context, stint, changeSequence, participants, ct);
+		await CaptureSequenceSpaceArchiveAsync(context, stint, justClosedGrants, participants, ct);
+	}
+
+	/// <summary>
+	/// The archive's public statuses for the messages that predate stage 11, which live in the legacy
+	/// <c>Messages</c>/<c>MessagesStatus</c> tables and are addressed by time rather than by sequence.
+	/// </summary>
+	private async Task CaptureLegacyStatusArchiveAsync(
+		MutationContext context,
+		SyncMembershipEntity stint,
+		long changeSequence,
+		IReadOnlyList<ChatParticipantAccess> participants,
+		CancellationToken ct)
+	{
 		// The messages this stint was permitted: its participation window plus every window of older
 		// history that was shared with it. Bounded by the chat's own history - a chat with no messages
 		// produces no rows at all.
@@ -681,7 +709,6 @@ public sealed class ChatMembershipService(
 		// reconnect sweep that used to manufacture those rows is gone (plan/10: Received proves a durable
 		// write on a real device). Anyone who DID reach a status is kept regardless, because the archive
 		// is evidence and a recorded status must not be dropped.
-		IReadOnlyList<ChatParticipantAccess> participants = await accessAuthority.DescribeParticipantsAsync(context.LegacyChat.Id, ct);
 		ILookup<int, int> reportedFor = live.ToLookup(s => s.MessageId, s => s.ReceiverId);
 
 		foreach (var message in permitted)
@@ -702,6 +729,88 @@ public sealed class ChatMembershipService(
 					{
 						ReceivedAtUtc = status.ReceivedAtUtc,
 						SeenAtUtc = status.SeenAtUtc,
+					});
+			}
+		}
+	}
+
+	/// <summary>
+	/// The same archive in SEQUENCE space (<c>SyncMessages</c>), for the stage-13 sync surfaces: a frozen
+	/// scope resolves its statuses at its own snapshot, so without these rows a v1 message in an archive
+	/// would come back with no statuses at all once the live rows moved on. The legacy pass above is its
+	/// twin for the messages that predate stage 11; both are written in this same transaction, under this
+	/// same chat lock, so an archive is captured whole or not at all.
+	///
+	/// Ranges are exactly what the stint is allowed to keep: the participation range this freeze has just
+	/// closed, plus every older window already closed when it was shared - and nothing in the gap of a
+	/// rejoin, which no grant covers.
+	/// </summary>
+	private async Task CaptureSequenceSpaceArchiveAsync(
+		MutationContext context,
+		SyncMembershipEntity stint,
+		IReadOnlyList<SyncMembershipHistoryGrantEntity> justClosedGrants,
+		IReadOnlyList<ChatParticipantAccess> participants,
+		CancellationToken ct)
+	{
+		// The ranges this freeze closed are still only in the change tracker, and a query is evaluated by
+		// the server, so they have to be carried in rather than read back; the windows already closed in
+		// the database are disjoint from them and are read here.
+		List<(long From, long Through)> grants =
+		[
+			.. justClosedGrants.Select(g => (g.FromMessageSequence, g.ThroughMessageSequence!.Value)),
+			.. (await db.SyncMembershipHistoryGrants.AsNoTracking()
+				.Where(g => g.MembershipId == stint.Id && g.ThroughMessageSequence != null)
+				.Select(g => new { g.FromMessageSequence, g.ThroughMessageSequence })
+				.ToListAsync(ct))
+				.Select(g => (g.FromMessageSequence, g.ThroughMessageSequence!.Value)),
+		];
+
+		if (grants.Count == 0)
+		{
+			return;
+		}
+
+		List<SyncMessageEntity> permitted = [.. (await db.SyncMessages.AsNoTracking()
+			.Where(m => m.ChatId == context.Chat.Id)
+			.ToListAsync(ct))
+			.Where(m => grants.Any(g => m.MessageSequence >= g.From && m.MessageSequence <= g.Through))];
+
+		if (permitted.Count == 0)
+		{
+			return;
+		}
+
+		string[] messageIds = [.. permitted.Select(m => m.Id)];
+		List<SyncMessageRecipientStateEntity> live = await db.SyncMessageRecipientStates.AsNoTracking()
+			.Where(s => s.ChatId == context.Chat.Id && messageIds.Contains(s.MessageId))
+			.ToListAsync(ct);
+
+		foreach (SyncMessageEntity message in permitted)
+		{
+			// Same denominator rule as the legacy pass: everyone entitled to this exact message at this
+			// instant, author excluded, plus anyone who has already reported something about it.
+			HashSet<string> recipients = [.. participants
+				.Where(p => p.AccountContextId is not null
+					&& !string.Equals(p.AccountContextId, message.SenderAccountId, StringComparison.Ordinal)
+					&& p.Access.PermitsMessageAt(message.CreatedAtUtc))
+				.Select(p => p.AccountContextId!)];
+
+			recipients.UnionWith(live
+				.Where(s => string.Equals(s.MessageId, message.Id, StringComparison.Ordinal))
+				.Select(s => s.AccountId));
+
+			foreach (string recipient in recipients.Order(StringComparer.Ordinal))
+			{
+				SyncMessageRecipientStateEntity? state = live.FirstOrDefault(s =>
+					string.Equals(s.MessageId, message.Id, StringComparison.Ordinal)
+					&& string.Equals(s.AccountId, recipient, StringComparison.Ordinal));
+
+				db.SyncMembershipMessageStatusSnapshots.Add(
+					new SyncMembershipMessageStatusSnapshotEntity(stint.Id, context.Chat.Id, message.Id, recipient)
+					{
+						ReceivedAtUtc = state?.ReceivedAtUtc,
+						SeenAtUtc = state?.SeenAtUtc,
+						SeenReason = state?.SeenReason,
 					});
 			}
 		}

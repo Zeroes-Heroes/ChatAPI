@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Services.Extensions;
 using Services.Sessions.Authorization;
 using Turbo.Controllers.Chat.Controller;
+using Turbo.Controllers.Sync.Controller;
 using Xunit;
 
 namespace MembershipTests;
@@ -81,5 +82,38 @@ public class ControllerAuthorizationMetadataTests
 
 		Assert.Empty(action.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true));
 		Assert.Empty(typeof(ChatController).GetCustomAttributes<AllowAnonymousAttribute>(inherit: true));
+	}
+
+	public static TheoryData<string> SyncActions() =>
+	[
+		nameof(SyncController.Catalog),
+		nameof(SyncController.History),
+		nameof(SyncController.Delta),
+	];
+
+	/// <summary>
+	/// Stage 13: the HTTP sync pages hand out permitted messages, their keys and their statuses, so they
+	/// are exactly as account-scoped as every endpoint above - and the page service's own session/rights
+	/// revalidation sits BEHIND this, never instead of it.
+	/// </summary>
+	[Theory]
+	[MemberData(nameof(SyncActions))]
+	public async Task SyncEndpoints_RequireTheCurrentlyTrustedAppSessionRequirement(string actionName)
+	{
+		MethodInfo action = typeof(SyncController).GetMethod(actionName)
+			?? throw new InvalidOperationException($"SyncController.{actionName} not found.");
+		IReadOnlyList<IAuthorizeData> data =
+		[
+			.. typeof(SyncController).GetCustomAttributes<AuthorizeAttribute>(inherit: true),
+			.. action.GetCustomAttributes<AuthorizeAttribute>(inherit: true),
+		];
+
+		AuthorizationPolicy policy = await AuthorizationPolicy.CombineAsync(PolicyProvider(), data)
+			?? throw new InvalidOperationException("No policy applies to this action.");
+
+		Assert.Contains(policy.Requirements, requirement => requirement is AppSessionRequirement);
+		Assert.DoesNotContain(policy.Requirements, requirement => requirement is BootstrapRequirement);
+		Assert.Empty(action.GetCustomAttributes<AllowAnonymousAttribute>(inherit: true));
+		Assert.Empty(typeof(SyncController).GetCustomAttributes<AllowAnonymousAttribute>(inherit: true));
 	}
 }

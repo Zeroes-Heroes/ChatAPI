@@ -32,6 +32,8 @@ using Services.Sessions;
 using Services.Sessions.Service;
 using Services.Statuses.Interface;
 using Services.Statuses.Service;
+using Services.Sync.Interface;
+using Services.Sync.Service;
 
 namespace MembershipTests;
 
@@ -155,6 +157,30 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			new ProtectedMessageKeyStore(),
 			Hub,
 			NullLogger<LiveDeliveryService>.Instance);
+
+	/// <summary>
+	/// Stage 13's sync module, composed exactly as the production wiring composes it: the real cursor
+	/// store, the real trust checker, the real access authority, the real author-key registry and the
+	/// real key module. Nothing here is a stand-in - a page these tests read is the page the controller
+	/// and the hub would answer.
+	/// </summary>
+	public static ISyncCursorStore Cursors(AppDbContext db) => new SyncCursorStore(db);
+
+	public SyncProjection Projection(AppDbContext db) =>
+		new(db,
+			AuthorKeys(db),
+			new MessageKeyProvisioningService(new AesGcmMessageKeyProtector(new FixedMasterSecretProvider())),
+			new ProtectedMessageKeyStore(),
+			NullLogger<SyncProjection>.Instance);
+
+	public ISyncSessionService SyncSessions(AppDbContext db) =>
+		new SyncSessionService(db, new SessionTrustChecker(db, Clock), Cursors(db), Clock);
+
+	public ISyncPageService SyncPages(AppDbContext db) =>
+		new SyncPageService(db, Authority(db), Cursors(db), Projection(db), Clock, NullLogger<SyncPageService>.Instance);
+
+	public ISyncRetention SyncRetention(AppDbContext db) =>
+		new SyncRetentionService(db, Clock, NullLogger<SyncRetentionService>.Instance);
 
 	/// <summary>A legacy message, the only kind that exists today (SyncMessages start in stage 11).</summary>
 	public static async Task<MessageEntity> SendLegacyAsync(AppDbContext db, ChatEntity chat, int senderLegacyUserId, string content, DateTime atUtc)

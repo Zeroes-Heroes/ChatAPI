@@ -18,4 +18,12 @@ public interface IProtectedMessageKeyStore
 	void Stage(AppDbContext db, SyncMessageKeyEntity entity);
 
 	Task<SyncMessageKeyEntity?> FindAsync(AppDbContext db, string messageId, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// The same read for one BOUNDED page of messages (stage 13's history pages), keyed by message id.
+	/// It exists so a page does not have to choose between N round trips and bypassing this seam with a
+	/// query of its own; the caller still supplies the ids it has already authorized, one page at a time.
+	/// </summary>
+	Task<IReadOnlyDictionary<string, SyncMessageKeyEntity>> FindManyAsync(
+		AppDbContext db, IReadOnlyCollection<string> messageIds, CancellationToken cancellationToken = default);
 }

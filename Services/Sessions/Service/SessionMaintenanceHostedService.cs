@@ -7,12 +7,13 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Services.Sessions.Interface;
 using Services.Sessions.Models;
+using Services.Sync.Interface;
 
 namespace Services.Sessions.Service;
 
 /// <summary>
-/// Two independent, small periodic jobs sharing one timer loop (not a god service - each does exactly
-/// one thing, see the two private methods below), per plan/05-device-sessions.md:
+/// Three independent, small periodic jobs sharing one timer loop (not a god service - each does exactly
+/// one thing, see the private methods below), per plan/05-device-sessions.md and plan/13-history-api.md:
 ///
 /// 1. <see cref="RevalidateLiveConnectionsAsync"/> - the cross-replica half of real revocation
 ///    enforcement for idle hub connections. <see cref="SessionRevocationNotifier"/> already aborts
@@ -23,11 +24,13 @@ namespace Services.Sessions.Service;
 ///    a fail-closed bound for a sustained DB outage/hang (<see cref="MaxUnverifiedAge"/>).
 /// 2. <see cref="IReplayPayloadCleanupService.PurgeExpiredAsync"/> - bounded data-minimization cleanup
 ///    of expired encrypted refresh-replay payloads.
+/// 3. <see cref="ISyncRetention"/> (stage 13) - expired sync sessions and one bounded portion of change-
+///    journal pruning, at its own much slower cadence (<see cref="SyncRetentionInterval"/>).
 ///
-/// PROPAGATION GUARANTEE, stated precisely: each tick runs connection revalidation and replay-payload
-/// cleanup in TWO INDEPENDENT try/catch blocks, each against its OWN <see cref="AppDbContext"/> scope (not
-/// a shared one) - a slow/failing/hung cleanup can never suppress that tick's own connection sweep, and
-/// vice versa, and neither can leave the other concurrently using a DbContext it does not own.
+/// PROPAGATION GUARANTEE, stated precisely: each tick runs the jobs in INDEPENDENT try/catch blocks, each
+/// against its OWN <see cref="AppDbContext"/> scope (not a shared one) - a slow/failing/hung cleanup can
+/// never suppress that tick's own connection sweep, and vice versa, and none can leave another
+/// concurrently using a DbContext it does not own.
 ///
 /// A plain <see cref="CancellationToken"/> is NOT by itself an upper bound here: an uncooperative wait
 /// (connection-pool exhaustion, a genuinely stuck TCP read, a server-side lock wait) may simply never
@@ -63,6 +66,9 @@ public sealed class SessionMaintenanceHostedService(
 	/// <summary>Enforced wall-clock deadline for one revalidation query or one cleanup batch-loop - see this class's own doc comment for why this is a real <c>Task.WhenAny</c> race, not merely a <see cref="CancellationToken"/> handed to a potentially-uncooperative call.</summary>
 	private static readonly TimeSpan DbOperationTimeout = TimeSpan.FromSeconds(10);
 
+	/// <summary>How often the stage-13 sync-retention sweep runs - deliberately far slower than <see cref="PollInterval"/>, because its own horizons are measured in days.</summary>
+	private static readonly TimeSpan SyncRetentionInterval = TimeSpan.FromMinutes(5);
+
 	private const int ReplayPurgeBatchSize = 500;
 	private const int ReplayPurgeMaxBatchesPerTick = 20; // bounds one tick's total work to at most 10,000 rows, regardless of backlog size.
 
@@ -74,6 +80,10 @@ public sealed class SessionMaintenanceHostedService(
 
 	private AbandonedOperation? _outstandingRevalidation;
 	private AbandonedOperation? _outstandingCleanup;
+	private AbandonedOperation? _outstandingRetention;
+
+	/// <summary>When the sync-retention sweep last started; it runs far more slowly than the tick itself (see <see cref="RunSyncRetentionAsync"/>).</summary>
+	private DateTimeOffset _lastSyncRetentionAtUtc = DateTimeOffset.MinValue;
 
 	protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 	{
@@ -112,6 +122,15 @@ public sealed class SessionMaintenanceHostedService(
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
 			logger.LogError(ex, "SessionMaintenanceHostedService: replay-payload cleanup failed this tick; will retry next tick.");
+		}
+
+		try
+		{
+			await RunSyncRetentionAsync(now, ct);
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException)
+		{
+			logger.LogError(ex, "SessionMaintenanceHostedService: sync retention failed this tick; will retry next tick.");
 		}
 	}
 
@@ -302,6 +321,58 @@ public sealed class SessionMaintenanceHostedService(
 
 		await cleanupScope.DisposeAsync();
 		await cleanupTask; // Already completed (the winner) - rethrows here if it faulted, caught by RunOneMaintenanceTickAsync's own try/catch.
+	}
+
+	/// <summary>
+	/// Stage 13's bounded sync cleanup (<see cref="ISyncRetention"/>): expired sync sessions, then one
+	/// portion of journal pruning. It runs on this same loop - a third small job rather than a third
+	/// near-identical hosted service - but at its OWN, much slower cadence: a journal horizon is measured
+	/// in days, so visiting it every <see cref="PollInterval"/> would be pure load. Same shape as the
+	/// other two jobs: its own scope, its own wall-clock bound, and at most one abandoned attempt
+	/// outstanding. Skipping a sweep is always safe; nothing depends on it having run.
+	/// </summary>
+	private async Task RunSyncRetentionAsync(DateTimeOffset now, CancellationToken ct)
+	{
+		if (_outstandingRetention is { } pending)
+		{
+			if (!pending.Task.IsCompleted)
+			{
+				logger.LogWarning("SessionMaintenanceHostedService: the previous sync-retention sweep has still not returned; not starting another this tick.");
+				return;
+			}
+
+			ObserveAbandonedOperationFault(pending, "sync-retention sweep");
+			await pending.Scope.DisposeAsync();
+			_outstandingRetention = null;
+		}
+
+		if (now - _lastSyncRetentionAtUtc < SyncRetentionInterval)
+		{
+			return;
+		}
+
+		_lastSyncRetentionAtUtc = now;
+
+		AsyncServiceScope retentionScope = scopeFactory.CreateAsyncScope();
+		Task retentionTask = RunSyncRetentionSweepAsync(retentionScope, ct);
+
+		Task winner = await Task.WhenAny(retentionTask, Task.Delay(DbOperationTimeout, ct));
+		if (winner != retentionTask)
+		{
+			logger.LogWarning("SessionMaintenanceHostedService: sync retention exceeded its {TimeoutSeconds}s bound; abandoning it for this tick.", DbOperationTimeout.TotalSeconds);
+			_outstandingRetention = new AbandonedOperation(retentionScope, retentionTask);
+			return;
+		}
+
+		await retentionScope.DisposeAsync();
+		await retentionTask; // Already completed (the winner) - rethrows here if it faulted, caught by RunOneMaintenanceTickAsync's own try/catch.
+	}
+
+	private static async Task RunSyncRetentionSweepAsync(AsyncServiceScope scope, CancellationToken ct)
+	{
+		ISyncRetention retention = scope.ServiceProvider.GetRequiredService<ISyncRetention>();
+		await retention.PurgeExpiredSessionsAsync(ct);
+		await retention.PruneJournalsAsync(ct);
 	}
 
 	private static async Task RunCleanupBatchesAsync(AsyncServiceScope scope, DateTimeOffset now, CancellationToken ct)

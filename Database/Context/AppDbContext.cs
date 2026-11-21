@@ -81,6 +81,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	// wire AuthorKeyReference. The one source a signed package may be verified against.
 	public DbSet<SyncAuthorKeyEntity> SyncAuthorKeys { get; set; }
 
+	// Server sync sessions, fixed boundaries, page cursors and position exchanges (plan 13). All four
+	// exist so that nothing a sync depends on lives in one replica's memory: a handshake taken on one
+	// API replica is continued by HTTP pages served from another.
+	public DbSet<SyncSessionEntity> SyncSessions { get; set; }
+	public DbSet<SyncSessionBoundaryEntity> SyncSessionBoundaries { get; set; }
+	public DbSet<SyncCursorEntity> SyncCursors { get; set; }
+	public DbSet<SyncPositionExchangeEntity> SyncPositionExchanges { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -138,5 +146,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new SyncLegacyMessageDeviceStateConfiguration());
 
 		modelBuilder.ApplyConfiguration(new SyncAuthorKeyConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncSessionConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncSessionBoundaryConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncCursorConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncPositionExchangeConfiguration());
 	}
 }

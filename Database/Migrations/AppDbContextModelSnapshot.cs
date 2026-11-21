@@ -206,6 +206,9 @@ namespace Database.Migrations
                     b.Property<long>("NextCatalogSequence")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("PrunedThroughCatalogSequence")
+                        .HasColumnType("bigint");
+
                     b.HasKey("AccountId");
 
                     b.ToTable("SyncAccountCatalogCounters", null, t =>
@@ -362,6 +365,9 @@ namespace Database.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<long>("NextMessageSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("PrunedThroughChangeSequence")
                         .HasColumnType("bigint");
 
                     b.HasKey("ChatId");
@@ -948,6 +954,9 @@ namespace Database.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("InitialRestoreCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasAlternateKey("DeviceRegistrationId", "Id")
@@ -1327,6 +1336,312 @@ namespace Database.Migrations
                     b.ToTable("SyncAuthorKeys", null, t =>
                         {
                             t.HasCheckConstraint("CK_SyncAuthorKeys_SpkiLength", "octet_length(\"Spki\") = 91");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncSessionEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("BoundaryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("CatalogAcknowledgedSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CatalogThroughSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("CatalogUploadedSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ConnectionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceRegistrationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DeviceSessionId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LocalInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ResumeCompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("RightsVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SnapshotId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "DeviceRegistrationId")
+                        .HasDatabaseName("IX_SyncSessions_AccountId_DeviceRegistrationId");
+
+                    b.HasIndex("AccountId", "DeviceSessionId")
+                        .HasDatabaseName("IX_SyncSessions_AccountId_DeviceSessionId");
+
+                    b.HasIndex("AccountId", "LocalInstanceId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_SyncSessions_AccountId_LocalInstanceId_CreatedAtUtc");
+
+                    b.HasIndex("DeviceRegistrationId", "LocalInstanceId")
+                        .HasDatabaseName("IX_SyncSessions_DeviceRegistrationId_LocalInstanceId");
+
+                    b.HasIndex("DeviceSessionId", "ConnectionId")
+                        .HasDatabaseName("IX_SyncSessions_DeviceSessionId_ConnectionId");
+
+                    b.ToTable("SyncSessions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncSessions_BoundaryCount_NonNegative", "\"BoundaryCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_SyncSessions_CatalogAcknowledged_WithinBoundary", "\"CatalogAcknowledgedSequence\" IS NULL OR \"CatalogAcknowledgedSequence\" <= \"CatalogThroughSequence\"");
+
+                            t.HasCheckConstraint("CK_SyncSessions_CatalogThroughSequence_NonNegative", "\"CatalogThroughSequence\" >= 0");
+
+                            t.HasCheckConstraint("CK_SyncSessions_ExpiresAfterCreated", "\"ExpiresAtUtc\" > \"CreatedAtUtc\"");
+
+                            t.HasCheckConstraint("CK_SyncSessions_RightsVersion_NonNegative", "\"RightsVersion\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncSessionBoundaryEntity", b =>
+                {
+                    b.Property<string>("SyncSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("AcknowledgedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("AcknowledgedSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsFrozen")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MembershipId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("PriorityRank")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("RightsVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ThroughChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("UploadedSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("SyncSessionId", "Ordinal");
+
+                    b.HasIndex("ChatId")
+                        .HasDatabaseName("IX_SyncSessionBoundaries_ChatId");
+
+                    b.HasIndex("ChatId", "MembershipId")
+                        .HasDatabaseName("IX_SyncSessionBoundaries_ChatId_MembershipId");
+
+                    b.HasIndex("SyncSessionId", "ChatId", "MembershipId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_SyncSessionBoundaries_SyncSessionId_ChatId_MembershipId");
+
+                    b.ToTable("SyncSessionBoundaries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncSessionBoundaries_AcknowledgedTime", "(\"AcknowledgedSequence\" IS NULL) = (\"AcknowledgedAtUtc\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_SyncSessionBoundaries_Acknowledged_WithinBoundary", "\"AcknowledgedSequence\" IS NULL OR \"AcknowledgedSequence\" <= \"ThroughChangeSequence\"");
+
+                            t.HasCheckConstraint("CK_SyncSessionBoundaries_Ordinal_NonNegative", "\"Ordinal\" >= 0");
+
+                            t.HasCheckConstraint("CK_SyncSessionBoundaries_PriorityRank_Range", "\"PriorityRank\" IS NULL OR (\"PriorityRank\" >= 1 AND \"PriorityRank\" <= 10)");
+
+                            t.HasCheckConstraint("CK_SyncSessionBoundaries_Through_NonNegative", "\"ThroughChangeSequence\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncCursorEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceRegistrationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Forward")
+                        .HasColumnType("boolean");
+
+                    b.Property<long>("FromSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsTerminal")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("IssuedThroughSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LocalInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NextCursorId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("RightsVersion")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SnapshotId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("StreamKind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Surface")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SyncSessionId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("UpperBoundSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SyncSessionId", "ExpiresAtUtc")
+                        .HasDatabaseName("IX_SyncCursors_SyncSessionId_ExpiresAtUtc");
+
+                    b.ToTable("SyncCursors", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncCursors_ChatScope_Complete", "(\"ChatId\" IS NULL) = (\"MembershipId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_SyncCursors_ExpiresAfterCreated", "\"ExpiresAtUtc\" > \"CreatedAtUtc\"");
+
+                            t.HasCheckConstraint("CK_SyncCursors_FromSequence_NonNegative", "\"FromSequence\" >= 0");
+
+                            t.HasCheckConstraint("CK_SyncCursors_IssuedThrough_WithinBound", "\"IssuedThroughSequence\" IS NULL OR \"IssuedThroughSequence\" <= \"UpperBoundSequence\"");
+
+                            t.HasCheckConstraint("CK_SyncCursors_StreamKind_Scope", "(\"StreamKind\" = 1) = (\"ChatId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SyncCursors_Terminal_HasNoNext", "NOT \"IsTerminal\" OR \"NextCursorId\" IS NULL");
+
+                            t.HasCheckConstraint("CK_SyncCursors_UpperBound_NonNegative", "\"UpperBoundSequence\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncPositionExchangeEntity", b =>
+                {
+                    b.Property<string>("SyncSessionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExchangeId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("BatchIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConnectionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Final")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestDigest")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("RightsVersion")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("SyncSessionId", "ExchangeId", "BatchIndex");
+
+                    b.ToTable("SyncPositionExchanges", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncPositionExchanges_BatchIndex_NonNegative", "\"BatchIndex\" >= 0");
                         });
                 });
 
@@ -2855,6 +3170,103 @@ namespace Database.Migrations
                     b.Navigation("RegisteredByDeviceRegistration");
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncSessionEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessions_AccountId_SyncAccounts_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncDeviceRegistrationEntity", "DeviceRegistration")
+                        .WithMany()
+                        .HasForeignKey("AccountId", "DeviceRegistrationId")
+                        .HasPrincipalKey("AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessions_AccountId_DeviceRegistrationId_SyncDeviceRegistrations");
+
+                    b.HasOne("Database.Entities.Sync.SyncDeviceSessionEntity", "DeviceSession")
+                        .WithMany()
+                        .HasForeignKey("AccountId", "DeviceSessionId")
+                        .HasPrincipalKey("AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessions_AccountId_DeviceSessionId_SyncDeviceSessions");
+
+                    b.HasOne("Database.Entities.Sync.SyncLocalInstanceEntity", "LocalInstance")
+                        .WithMany()
+                        .HasForeignKey("DeviceRegistrationId", "LocalInstanceId")
+                        .HasPrincipalKey("DeviceRegistrationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessions_DeviceRegistrationId_LocalInstanceId_SyncLocalInstances");
+
+                    b.Navigation("Account");
+
+                    b.Navigation("DeviceRegistration");
+
+                    b.Navigation("DeviceSession");
+
+                    b.Navigation("LocalInstance");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncSessionBoundaryEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncChatEntity", "Chat")
+                        .WithMany()
+                        .HasForeignKey("ChatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessionBoundaries_ChatId_SyncChats_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessionBoundaries_ChatId_MembershipId_SyncMemberships");
+
+                    b.HasOne("Database.Entities.Sync.SyncSessionEntity", "Session")
+                        .WithMany("Boundaries")
+                        .HasForeignKey("SyncSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncSessionBoundaries_SyncSessionId_SyncSessions_Id");
+
+                    b.Navigation("Chat");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncCursorEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncSessionEntity", "Session")
+                        .WithMany()
+                        .HasForeignKey("SyncSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncCursors_SyncSessionId_SyncSessions_Id");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncPositionExchangeEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncSessionEntity", "Session")
+                        .WithMany()
+                        .HasForeignKey("SyncSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncPositionExchanges_SyncSessionId_SyncSessions_Id");
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("Database.Entities.MessageEntity", b =>
                 {
                     b.Navigation("MessageStatusEntities");
@@ -2911,6 +3323,11 @@ namespace Database.Migrations
             modelBuilder.Entity("Database.Entities.Sync.SyncMessageEntity", b =>
                 {
                     b.Navigation("Key");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncSessionEntity", b =>
+                {
+                    b.Navigation("Boundaries");
                 });
 
             modelBuilder.Entity("Database.Entities.UserDeviceEntity", b =>

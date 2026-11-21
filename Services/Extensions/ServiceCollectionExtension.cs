@@ -49,6 +49,8 @@ using Services.Statuses.Interface;
 using Services.Statuses.Service;
 using Services.Sessions.Interface;
 using Services.Sessions.Service;
+using Services.Sync.Interface;
+using Services.Sync.Service;
 using Services.Hubs.Filters;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
@@ -315,6 +317,17 @@ public static class ServiceCollectionExtension
 			.AddScoped<ILiveDeliveryService, LiveDeliveryService>()
 			.AddHostedService<OutboxPublisherHostedService>()
 			.AddHostedService<DeliveryConsumerHostedService>()
+			// Stage 13 server sync and history (Services/Sync). Every one of them reads and writes through
+			// the CALLER's own AppDbContext and transaction - the handshake fixes its boundaries under the
+			// account's catalog counter row, a page mints its cursor in the same unit of work that answers
+			// it - so they are Scoped like every other module that writes. SyncProjection is registered as
+			// a concrete type on purpose: it is this module's own internal collaborator (the one place
+			// committed state becomes a v1 payload), not a seam another module may swap.
+			.AddScoped<ISyncCursorStore, SyncCursorStore>()
+			.AddScoped<SyncProjection>()
+			.AddScoped<ISyncSessionService, SyncSessionService>()
+			.AddScoped<ISyncPageService, SyncPageService>()
+			.AddScoped<ISyncRetention, SyncRetentionService>()
 			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
 			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
 			// share one timer loop instead of being two near-identical hosted services.

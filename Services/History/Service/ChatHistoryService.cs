@@ -297,7 +297,7 @@ public sealed class ChatHistoryService(
 			{
 				// The archive's own denominator. The freeze writes one row per person ENTITLED to that
 				// message back then - including the ones that had reached no status at all, whose row
-				// carries two null timestamps (ChatMembershipService.CaptureArchiveAsync) - so the row
+				// carries two null timestamps (ChatMembershipService.CaptureLegacyStatusArchiveAsync) - so the row
 				// count IS "хората с право върху съответното съобщение". The author is excluded here as
 				// well as there: a stray self-status row must not inflate a proportion.
 				int senderId = senderOf.TryGetValue(byMessage.Key, out int sender) ? sender : 0;

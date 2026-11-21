@@ -25,5 +25,8 @@ public class SyncAccountCatalogCounterEntity
 
 	public long NextCatalogSequence { get; set; }
 
+	/// <summary>Stage 13: the catalog counterpart of SyncChatSequenceCounterEntity.PrunedThroughChangeSequence - how far this account's catalog journal has been cleaned.</summary>
+	public long PrunedThroughCatalogSequence { get; set; }
+
 	public virtual SyncAccountEntity Account { get; set; } = null!;
 }

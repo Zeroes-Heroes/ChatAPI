@@ -32,5 +32,14 @@ public class SyncChatSequenceCounterEntity
 
 	public long NextChangeSequence { get; set; }
 
+	/// <summary>
+	/// Stage 13: how far this chat's change journal (SyncChatChanges) has been cleaned. 0 means nothing
+	/// was ever pruned. A delta read that would have to start at or below this value cannot prove it is
+	/// not skipping a change, so it answers CursorInvalid and the device reconciles its allowed state
+	/// from the entity tables instead - which is what "Журналът се почиства само при възстановимост на
+	/// необходимото състояние" means in practice: the journal is a liveness mechanism, not the record.
+	/// </summary>
+	public long PrunedThroughChangeSequence { get; set; }
+
 	public virtual SyncChatEntity Chat { get; set; } = null!;
 }
