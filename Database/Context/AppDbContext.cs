@@ -98,6 +98,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new SyncRecoveryEnvelopeConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncDeviceApprovalGrantConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncAuthorKeyHandoffConfiguration());
+		// SyncAuthorKeyEscrowEntity has no convention-discoverable key (its key is the composite
+		// (AccountId, RecoveryVersion, AuthorKeyId) declared in its configuration), so leaving this
+		// registration out - as stage 06 did - makes model building itself fail for the whole context.
+		// The stage-06 migration and the model snapshot already describe this table exactly as the
+		// configuration does; registering it is what makes the runtime model agree with both.
+		modelBuilder.ApplyConfiguration(new SyncAuthorKeyEscrowConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncLegacyContextExclusionConfiguration());
 	}
 }

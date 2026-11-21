@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Services.Extensions;
 using Services.Hubs.Models;
+using Services.Membership.Interface;
+using Services.Membership.Models;
 using Services.NotificationDispatch.Interface;
 using Services.Presence.Interface;
 using Services.Sessions;
@@ -115,7 +117,7 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		// IReadOnlySet interface method.
 		int[] excludedChatIds = [.. await contextBoundary.ExcludedLegacyChatIdsAsync(user, Context.ConnectionAborted)];
 
-		MessageEntity[] undeliveredMessages =
+		MessageEntity[] candidateMessages =
 			await dbContext.Messages
 			.Where(m =>
 				m.Chat.Users.Select(u => u.Id).Contains(receiverId)
@@ -124,6 +126,18 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId
 					&& ms.Status == MessageStatus.Received))
 			.ToArrayAsync();
+
+		// Stage 07, deferred delivery: the legacy row keeps every past participant of a chat (that is what
+		// keeps a removed member's archive readable), so membership - not the legacy user list - decides
+		// what this reconnect may actually deliver and acknowledge. One shared check, the same one HTTP and
+		// live delivery use: a member added later never reaches back before its own window, and a removed
+		// member never reaches past its removal.
+		IChatAccessAuthority accessAuthority = serviceProvider.GetRequiredService<IChatAccessAuthority>();
+		IReadOnlyDictionary<int, ChatAccess> chatAccess = await accessAuthority.GetManyAsync(
+			user, [.. candidateMessages.Select(m => m.ChatId).Distinct()], Context.ConnectionAborted);
+
+		MessageEntity[] undeliveredMessages = [.. candidateMessages
+			.Where(m => chatAccess.TryGetValue(m.ChatId, out ChatAccess? access) && access.PermitsMessageAt(m.CreatedAt))];
 
 		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Received, now)).ToArray();
 
@@ -268,6 +282,8 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 		}
 
+		IChatAccessAuthority accessAuthority = serviceProvider.GetRequiredService<IChatAccessAuthority>();
+
 		// SessionGuardHubFilter already re-checked trust on ENTRY to this invocation, but that alone
 		// cannot stop a request admitted a moment before a concurrent revoke's commit from still
 		// persisting/publishing after it - a plain second read immediately before this insert would
@@ -276,10 +292,25 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		// DeviceTrustService.RevokeDeviceAsync/RefreshTokenService.RotateAsync for this caller (see
 		// ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's own doc comment for the full
 		// lock-ordering argument).
-		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, () =>
+		//
+		// Stage 07 adds the second serialization point inside the very same transaction: the chat's own
+		// counter row, which every membership mutation allocates its change sequence from. Checking the
+		// publish right under that lock is what makes "Промените на правата се сериализират със записите в
+		// чата" true - a concurrent removal/leave either commits first (and this send is then refused) or
+		// waits until this message has committed.
+		bool mayPublish = false;
+		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, async () =>
 		{
+			ChatAccess access = await accessAuthority.LockChatAndAuthorizeAsync(user, chatId, Context.ConnectionAborted);
+			mayPublish = access.CanSend;
+			if (!mayPublish)
+			{
+				// A frozen archive is read-only, and a non-member has nothing here at all.
+				return;
+			}
+
 			insertedMessage = dbContext.Messages.Add(new MessageEntity(sendMessageEvent.Content, senderId, chatId, DateTime.UtcNow)).Entity;
-			return dbContext.SaveChangesAsync();
+			await dbContext.SaveChangesAsync();
 		}, Context.ConnectionAborted);
 
 		if (!trust.IsTrusted)
@@ -288,9 +319,19 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 		}
 
+		if (!mayPublish)
+		{
+			return;
+		}
+
 		MessageEntity messageEntity = insertedMessage!;
 
-		int[] receiversIds = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync() ?? []).Except([senderId]).ToArray();
+		int[] chatParticipants = (await dbContext.Chats.Where(c => c.Id == sendMessageEvent.ChatId).Select(c => c.Users.Select(u => u.Id)).FirstOrDefaultAsync() ?? []).Except([senderId]).ToArray();
+
+		// Only currently active members receive new content; a removed/departed participant keeps its
+		// archive but is not a recipient of anything created after it left (the legacy participant row it
+		// still has is what preserves that archive, so it cannot be used as the recipient list).
+		int[] receiversIds = [.. await accessAuthority.ActiveLegacyRecipientsAsync(chatId, chatParticipants, Context.ConnectionAborted)];
 
 		NewMessageCreatedEvent newMessageCreatedEvent = new(messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt);
 		NewMessageEvent newMessageEvent = new(messageEntity.Id, senderId, messageEntity.ChatId, sendMessageEvent.Content, messageEntity.CreatedAt);
@@ -379,18 +420,32 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 		}
 
+		// Stage 07: a read-only archive publishes nothing. Entering a chat whose membership has ended must
+		// neither mark its messages Seen for everyone else nor register this caller as present in it (which
+		// would make a later sender's own fast path mark its message Seen for a non-member) - the private
+		// device-side progress of an archive is stage 08's concern, not a public mark here.
+		IChatAccessAuthority accessAuthority = serviceProvider.GetRequiredService<IChatAccessAuthority>();
+		ChatAccess access = await accessAuthority.GetAsync(user, chatId, Context.ConnectionAborted);
+		if (!access.CanSend)
+		{
+			return;
+		}
+
 		string cacheKey = string.Format(CacheKeys.ChatEntered, receiverId, chatId);
 		string userCurrentChatIdKey = string.Format(CacheKeys.UserCurrentChatId, receiverId);
 		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
 		await cache.SetAsync(userCurrentChatIdKey, chatId, DateTime.UtcNow.AddDays(1));
 
 		MessageEntity[] unSeenMessages =
-			await dbContext.Messages
-			.Where(
-				m => m.ChatId == chatEnteredEvent.ChatId
-				&& m.SenderId != receiverId
-				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == MessageStatus.Seen))
-			.ToArrayAsync();
+			[.. (await dbContext.Messages
+				.Where(
+					m => m.ChatId == chatEnteredEvent.ChatId
+					&& m.SenderId != receiverId
+					&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == MessageStatus.Seen))
+				.ToArrayAsync())
+				// Only messages this membership actually permits: a participant added later must not mark
+				// the chat's earlier history - which it never received - as Seen for its authors.
+				.Where(m => access.PermitsMessageAt(m.CreatedAt))];
 
 		if (unSeenMessages.Length == 0)
 		{

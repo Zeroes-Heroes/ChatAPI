@@ -6,6 +6,9 @@ public static class LiveEvents
 	public static readonly string FriendRequestAnswer = "friend-request-answer";
 	public static readonly string NewFriendRequest = "friend-request";
 	public static readonly string ChatCreated = "chat-created";
+
+	/// <summary>Client event name for a committed group composition change (stage 07) - see Services/Membership/Service/ChatMembershipService.cs. A removed subject receives its own copy of this event without the actor's identity.</summary>
+	public static readonly string ChatMembershipChanged = "chat-membership-changed";
 	public static readonly string NewMessageCreated = "new-message-created";
 	public static readonly string MessageStatusUpdate = "message-status-update";
 

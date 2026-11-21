@@ -12,6 +12,9 @@ public sealed class SyncAccountProvisioningService : ISyncAccountProvisioningSer
 {
 	private const int AccountIdLength = 20;
 
+	/// <summary>Scopes the undo of one losing insert to that insert alone; re-created per attempt, so a caller provisioning several accounts keeps the ones that already succeeded.</summary>
+	private const string ProvisionSavepoint = "sync_account_provision";
+
 	public async Task<SyncAccountEntity> GetOrCreateActiveAccountAsync(AppDbContext db, int legacyUserId, DateTime now, CancellationToken ct = default)
 	{
 		SyncAccountEntity? existing = await db.SyncAccounts
@@ -26,6 +29,16 @@ public sealed class SyncAccountProvisioningService : ISyncAccountProvisioningSer
 		db.SyncAccounts.Add(account);
 		db.SyncAccountCatalogCounters.Add(counter);
 
+		// The caller may own an open transaction (stage 07 provisions an account for every participant of
+		// the chat it is creating, inside that creation's own transaction). In PostgreSQL a failed
+		// statement aborts the whole transaction, so without a savepoint to roll back to, the recovery
+		// below could not run a single query - the "lost the race" path would raise 25P02 instead.
+		IDbContextTransaction? ambient = db.Database.CurrentTransaction;
+		if (ambient is not null)
+		{
+			await ambient.CreateSavepointAsync(ProvisionSavepoint, ct);
+		}
+
 		try
 		{
 			await db.SaveChangesAsync(ct);
@@ -36,7 +49,13 @@ public sealed class SyncAccountProvisioningService : ISyncAccountProvisioningSer
 			// Lost a race to a concurrent first call for the same legacy user - the filtered unique
 			// index (IX_SyncAccounts_LegacyUserId_Active) rejected this insert. Detach the losing
 			// entities and return the winner's already-committed row instead of surfacing a spurious
-			// failure for what is, from the caller's perspective, a successful "get or create".
+			// failure for what is, from the caller's perspective, a successful "get or create". Only
+			// this attempt is undone; everything the caller wrote before it stays in its transaction.
+			if (ambient is not null)
+			{
+				await ambient.RollbackToSavepointAsync(ProvisionSavepoint, ct);
+			}
+
 			db.Entry(account).State = EntityState.Detached;
 			db.Entry(counter).State = EntityState.Detached;
 			return await db.SyncAccounts.SingleAsync(a => a.LegacyUserId == legacyUserId && a.EndedAtUtc == null, ct);

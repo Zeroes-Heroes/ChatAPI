@@ -27,6 +27,8 @@ using Services.Presence.Service;
 using Services.Keys;
 using Services.Keys.Interface;
 using Services.Keys.Service;
+using Services.Membership.Interface;
+using Services.Membership.Service;
 using Services.Recovery.Interface;
 using Services.Recovery.Service;
 using Services.Sessions.Authorization;
@@ -247,6 +249,12 @@ public static class ServiceCollectionExtension
 			.AddSingleton<ISessionConnectionRegistry, SessionConnectionRegistry>()
 			.AddSingleton<ISessionRevocationNotifier, SessionRevocationNotifier>()
 			.AddScoped<ISessionTrustChecker, SessionTrustChecker>()
+			// Stage 07 chat/membership module (Services/Membership). All three are Scoped: each one reads
+			// and writes through the CALLER's own AppDbContext/transaction (the chat lock and the membership
+			// write must share it), exactly like IAccountContextBoundary above.
+			.AddScoped<IPersonalBlockDirectory, PersonalBlockDirectory>()
+			.AddScoped<IChatAccessAuthority, ChatAccessAuthority>()
+			.AddScoped<IChatMembershipService, ChatMembershipService>()
 			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
 			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
 			// share one timer loop instead of being two near-identical hosted services.

@@ -967,6 +967,10 @@ namespace Database.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("AddedByAccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ChatId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -985,6 +989,9 @@ namespace Database.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("LegacyHistoryFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<long>("RightsVersion")
                         .HasColumnType("bigint");
 
@@ -1001,9 +1008,15 @@ namespace Database.Migrations
 
                     b.HasIndex("AccountId");
 
+                    b.HasIndex("AddedByAccountId");
+
                     b.HasIndex("EndedByAccountId");
 
                     b.HasIndex("ChatId", "AccountId");
+
+                    b.HasIndex(new[] { "ChatId", "AccountId" }, "IX_SyncMemberships_ChatId_AccountId_Active")
+                        .IsUnique()
+                        .HasFilter("\"State\" = 0");
 
                     b.ToTable("SyncMemberships", (string)null);
                 });
@@ -2009,7 +2022,15 @@ namespace Database.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_SyncMemberships_EndedByAccountId_SyncAccounts_Id");
 
+                    b.HasOne("Database.Entities.Sync.SyncAccountEntity", "AddedByAccount")
+                        .WithMany()
+                        .HasForeignKey("AddedByAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncMemberships_AddedByAccountId_SyncAccounts_Id");
+
                     b.Navigation("Account");
+
+                    b.Navigation("AddedByAccount");
 
                     b.Navigation("Chat");
 
