@@ -5,6 +5,7 @@ using Database.Enums.Sync;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Services.Chat.Interface;
 using Services.Chat.Models.CreateChat;
@@ -144,7 +145,9 @@ public class ChatCreationRulesTests(DatabaseFixture fixture)
 
 		ServiceCollection services = new();
 		services.AddLogging();
-		services.AddServices();
+		// Stage 12 gave AddServices the configuration it needs for the SignalR Redis backplane; an empty
+		// one means "no backplane, no broker", which is exactly this in-process harness.
+		services.AddServices(new ConfigurationBuilder().Build());
 		// ChatService, ChatRepository, the membership writer and the trust checker must share ONE
 		// context, because the chat insert, the membership projection and the trust lock are one
 		// transaction - which is exactly what the production (scoped) registration gives them.

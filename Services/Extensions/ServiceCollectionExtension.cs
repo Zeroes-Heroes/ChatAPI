@@ -19,6 +19,9 @@ using Services.Chat.Interface;
 using Services.Chat.Service;
 using Services.Contacts.Interface;
 using Services.Contacts.Service;
+using Services.Delivery;
+using Services.Delivery.Interface;
+using Services.Delivery.Service;
 using Services.Crypto.Interface;
 using Services.Crypto.Service;
 using Services.DeviceNotificationConfig.Interface;
@@ -83,7 +86,12 @@ public static class ServiceCollectionExtension
 			// themselves. Bound from a nested "MasterSecret" section (env vars
 			// MasterSecret__DirectoryPath / MasterSecret__CurrentVersion) rather than flat top-level
 			// keys like AppSettings, to avoid colliding with other top-level configuration names.
-			.Configure<MasterSecretOptions>(config.GetSection("MasterSecret"));
+			.Configure<MasterSecretOptions>(config.GetSection("MasterSecret"))
+			// Stage 12 (plan/12-outbox-delivery.md): broker connection and the publisher/consumer bounds,
+			// from a nested "Delivery" section (env vars Delivery__ConnectionUri, Delivery__Exchange, ...)
+			// for the same no-collision reason as MasterSecret above. An absent ConnectionUri means this
+			// deployment has no broker, which the two delivery workers report once and then stay idle for.
+			.Configure<DeliveryOptions>(config.GetSection("Delivery"));
 
 	/// <summary>
 	/// Adds and configures the swagger.
@@ -211,7 +219,8 @@ public static class ServiceCollectionExtension
 	/// <param name="services">IServiceCollection</param>
 	/// <param name="configuration">IConfiguration</param>
 	/// <returns>IServiceCollection</returns>
-	public static IServiceCollection AddServices(this IServiceCollection services) =>
+	public static IServiceCollection AddServices(this IServiceCollection services, IConfiguration configuration)
+	{
 		services
 			.AddTransient<ITokenService, TokenService>()
 			.AddScoped<IAppleService, AppleService>()
@@ -295,10 +304,23 @@ public static class ServiceCollectionExtension
 			.AddSingleton<IProtectedMessageKeyStore, ProtectedMessageKeyStore>()
 			.AddScoped<IAuthorKeyRegistry, AuthorKeyRegistry>()
 			.AddScoped<IMessageAcceptanceService, MessageAcceptanceService>()
+			// Stage 12 outbox/live delivery (Services/Delivery). The broker holds one process-wide
+			// connection and the wake-up signal is one per replica, so both are Singletons; the outbox store
+			// and the delivery service read/write through a scope's own AppDbContext (one bounded portion per
+			// scope, per MESSAGE_SYNC_ANALYSIS.md) and are therefore Scoped like every other such module.
+			// The two workers are the only callers of the broker.
+			.AddSingleton<IDeliveryBroker, RabbitMqDeliveryBroker>()
+			.AddSingleton<IOutboxPublishSignal, OutboxPublishSignal>()
+			.AddScoped<IOutboxStore, OutboxStore>()
+			.AddScoped<ILiveDeliveryService, LiveDeliveryService>()
+			.AddHostedService<OutboxPublisherHostedService>()
+			.AddHostedService<DeliveryConsumerHostedService>()
 			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
 			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
 			// share one timer loop instead of being two near-identical hosted services.
-			.AddHostedService<SessionMaintenanceHostedService>()
+			.AddHostedService<SessionMaintenanceHostedService>();
+
+		ISignalRServerBuilder signalR = services
 			.AddSignalR(options =>
 				{
 					// Re-checks current trust on every hub invocation (including OnConnectedAsync) -
@@ -313,9 +335,21 @@ public static class ServiceCollectionExtension
 							  CustomResolver.Instance,
 							  ContractlessStandardResolver.Instance,
 							  StandardResolver.Instance));
-				 })
-			.Services
-			.AddScoped<SessionGuardHubFilter>();
+				 });
+
+		// Stage 12 (plan/12-outbox-delivery.md): "Live доставката използва SignalR Redis backplane". The
+		// delivery consumer runs on whichever replica took the broker task, which is generally NOT the
+		// replica holding the recipient's connection - without the backplane its group send would reach
+		// only locally-held connections. The same Redis the distributed cache already uses; with none
+		// configured this stays a single-replica deployment, exactly as before.
+		string? redisConnectionString = configuration["RedisConnection"];
+		if (!string.IsNullOrWhiteSpace(redisConnectionString))
+		{
+			signalR.AddStackExchangeRedis(redisConnectionString);
+		}
+
+		return services.AddScoped<SessionGuardHubFilter>();
+	}
 
 	public static IServiceCollection InitializeTwilio(this IServiceCollection service, IConfiguration configuration)
 	{

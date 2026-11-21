@@ -106,9 +106,11 @@ Seen in one space cannot erase the other's contribution.
 
 ## What this stage does not do
 
-- **Nothing is delivered.** The outbox row is written; claiming, publishing and live delivery are
-  stage 12. A recipient sees nothing yet from a v1 message.
+- **Delivery is stage 12.** This transaction only writes the outbox row; claiming, publishing and the
+  live fan-out are `docs/outbox-delivery.md`, which also wakes this replica's publisher from the hub
+  right after the commit (`AcceptanceOutcome.OutboxId`).
 - **No v1 receipts.** `SyncMessageDeviceStates` stays unwritten - the v1 receipt surface arrives with
-  delivery. The legacy `message-receipt` method is unchanged and still operates on legacy messages.
+  the device-side consumer. The legacy `message-receipt` method is unchanged and still operates on
+  legacy messages.
 - **No v1 history/sync.** The journal entries this stage writes are read by stage 13.
 - The legacy `send-message` path is unchanged and still writes legacy messages.

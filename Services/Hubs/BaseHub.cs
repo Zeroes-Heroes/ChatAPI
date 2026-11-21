@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Services.Authorship.Interface;
 using Services.Crypto;
+using Services.Delivery.Interface;
+using Services.Delivery.Service;
 using Services.Extensions;
 using Services.Hubs.Models;
 using Services.Membership.Interface;
@@ -89,11 +91,22 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		{
 			await Groups.AddToGroupAsync(Context.ConnectionId, Services.Sessions.Service.SessionRevocationNotifier.GroupName(sessionId));
 
+			string? accountId = user.FindFirstValue(SessionClaimTypes.AccountContextId);
+			string? deviceRegistrationId = user.FindFirstValue(SessionClaimTypes.DeviceRegistrationId);
+
+			// Stage 12: the address v1 live delivery uses. Joined here, from the session's OWN claims, so a
+			// connection can only ever subscribe to its own device registration - and, because a registration
+			// belongs to exactly one account context, a phone that started over cannot receive the superseded
+			// context's messages over its new connection. Left automatically when the connection ends; the
+			// Redis backplane is what makes the group reachable from the replica that consumed the task.
+			if (deviceRegistrationId is not null)
+			{
+				await Groups.AddToGroupAsync(Context.ConnectionId, DeliveryGroups.ForDevice(deviceRegistrationId));
+			}
+
 			// Registers this exact connection so a later revocation can actually abort it even while
 			// idle (ISessionConnectionRegistry), not merely notify it - see that interface's own doc
 			// comment for the same-replica/cross-replica split.
-			string? accountId = user.FindFirstValue(SessionClaimTypes.AccountContextId);
-			string? deviceRegistrationId = user.FindFirstValue(SessionClaimTypes.DeviceRegistrationId);
 			string? trustVersionClaim = user.FindFirstValue(SessionClaimTypes.TrustVersion);
 			string? expClaim = user.FindFirstValue(JwtRegisteredClaimNames.Exp);
 			if (accountId is not null && deviceRegistrationId is not null && long.TryParse(trustVersionClaim, out long trustVersion) && long.TryParse(expClaim, out long expSeconds))
@@ -541,6 +554,14 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			serviceProvider.GetRequiredService<IAccountContextBoundary>(),
 			LegacyChatIdOf(request!.Scope?.ChatId),
 			result.Data.OwnSendSeen);
+
+		if (result.Data.OutboxId is not null)
+		{
+			// Stage 12: this acceptance queued a row, so wake this replica's publisher instead of letting
+			// live delivery wait for its next poll. Latency only - the row itself is what makes the message
+			// deliverable, from any replica, after any crash.
+			serviceProvider.GetRequiredService<IOutboxPublishSignal>().Notify();
+		}
 
 		string answer = WriteSync(result.Data.Result);
 

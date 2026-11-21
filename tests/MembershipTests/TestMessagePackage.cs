@@ -49,8 +49,8 @@ internal sealed class TestAuthorKey : IDisposable
 		return ($"{signingInput}.{Base64Url.Encode(signature)}", messageKey);
 	}
 
-	/// <summary>docs/sync-contract-v1.md's exact AAD array - the one the production verifier's own decrypt side must agree with.</summary>
-	private static byte[] Aad(MessageBinding binding) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new[]
+	/// <summary>docs/sync-contract-v1.md's exact AAD array - the one the production verifier's own decrypt side must agree with. Internal (stage 12) so a delivery test can decrypt what the server actually granted.</summary>
+	public static byte[] Aad(MessageBinding binding) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new[]
 	{
 		"chat-message-v1",
 		"1",

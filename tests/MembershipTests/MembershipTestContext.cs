@@ -12,11 +12,15 @@ using Services.History.Interface;
 using Services.History.Service;
 using Services.Hubs;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Services.Authorship.Interface;
 using Services.Authorship.Service;
 using Services.Contacts.Interface;
 using Services.Contacts.Service;
 using Services.Crypto.Service;
+using Services.Delivery;
+using Services.Delivery.Interface;
+using Services.Delivery.Service;
 using Services.Keys.Interface;
 using Services.Keys.Service;
 using Services.Membership.Interface;
@@ -121,6 +125,36 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()),
 			new SessionTrustChecker(db, Clock),
 			Clock);
+
+	/// <summary>Stage 12's bounds, with a small attempt limit so exhausting it is observable.</summary>
+	public static DeliveryOptions DeliveryConfiguration() => new()
+	{
+		ConnectionUri = "amqp://test-only/",
+		ClaimBatchSize = 100,
+		LeaseSeconds = 60,
+		RetryBaseSeconds = 2,
+		RetryMaxSeconds = 300,
+		MaxAttempts = 3,
+	};
+
+	/// <summary>Stage 12's outbox queue over the REAL table, with this context's controllable clock - which is what lets a lease expiry and a backoff be observed rather than waited for.</summary>
+	public IOutboxStore Outbox(AppDbContext db, DeliveryOptions? config = null) =>
+		new OutboxStore(db, Options.Create(config ?? DeliveryConfiguration()), Clock);
+
+	/// <summary>
+	/// Stage 12's live delivery, composed exactly as the production wiring composes it: the real access
+	/// authority (rights and windows), the real author-key registry, the real key module and the real
+	/// protected-key store. Only the SignalR hub context is the recording sink every other suite uses.
+	/// </summary>
+	public ILiveDeliveryService Delivery(AppDbContext db) =>
+		new LiveDeliveryService(
+			db,
+			Authority(db),
+			AuthorKeys(db),
+			new MessageKeyProvisioningService(new AesGcmMessageKeyProtector(new FixedMasterSecretProvider())),
+			new ProtectedMessageKeyStore(),
+			Hub,
+			NullLogger<LiveDeliveryService>.Instance);
 
 	/// <summary>A legacy message, the only kind that exists today (SyncMessages start in stage 11).</summary>
 	public static async Task<MessageEntity> SendLegacyAsync(AppDbContext db, ChatEntity chat, int senderLegacyUserId, string content, DateTime atUtc)

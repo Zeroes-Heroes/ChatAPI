@@ -11,7 +11,8 @@ Protocol types introduce no runtime packages. Existing manifests remain unchange
 | react-native-nitro-modules | 0.33.2 | Exact dev version in Quick Crypto 1.1.8; candidate for this app. |
 | react-native-quick-base64 | 3.0.0 | Candidate satisfying peer floor; native graph unverified. |
 | react-native-keychain | 10.0.0 | Release min Android SDK 23; app minSdk 24. Native behavior unverified. |
-| RabbitMQ.Client | 7.2.2 | Published net8.0 target; restore/build verified in an isolated probe (2026-10-28); production in-project reference and broker integration remain pending. |
+| RabbitMQ.Client | 7.2.2 | Referenced by Services.csproj from stage 12 (Services/Delivery). Published net8.0 target; restore/build verified in an isolated probe (2026-10-28) and in stage 12 (2026-11-21); broker integration remains pending. |
+| Microsoft.AspNetCore.SignalR.StackExchangeRedis | 8.0.6 | Added in stage 12 for the live-delivery backplane, same pin line as the other Microsoft.AspNetCore.* references; restore/build verified in stage 12 (2026-11-21); multi-replica fan-out unverified. |
 | Built-in .NET AesGcm/ECDsa | net8.0 / runtime 8.0.30 | Executed installed Linux implementations in cross-runtime probe. |
 | Argon2id | Quick Crypto 1.1.8 | Candidate client derivation; no server Argon2 dependency since server does not receive password. Native API/performance unverified. |
 

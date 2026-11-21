@@ -22,6 +22,22 @@ public static class LiveEvents
 	/// <summary>Client event name for a wire SessionControlEvent, sent to <see cref="SessionGroupFormat"/>'s group - see Services/Sessions/Service/SessionRevocationNotifier.cs.</summary>
 	public static readonly string SessionControl = "session-control";
 
+	/// <summary>
+	/// Stage 12 (plan/12-outbox-delivery.md): one v1 <c>LiveEvent</c>, carried as a JSON string encoded with
+	/// SyncProtocol.CreateJsonOptions() exactly like the hub's own v1 methods. Published by
+	/// Services/Delivery/Service/LiveDeliveryService.cs to <see cref="SyncDeviceGroupFormat"/>'s group.
+	/// </summary>
+	public static readonly string SyncChange = "sync-change";
+
+	/// <summary>
+	/// Stage 12: SignalR group name format every connection joins for its OWN device registration in
+	/// BaseHub.OnConnectedAsync, and the only scope v1 live delivery addresses. A registration belongs to
+	/// exactly one account context (Services/Sessions/Service/DeviceChallengeService.cs refuses a foreign
+	/// one), so this is per-device AND fresh-start isolated - unlike the legacy user-id fan-out, which
+	/// cannot tell a phone's superseded context from its current one.
+	/// </summary>
+	public static readonly string SyncDeviceGroupFormat = "sync-device:{0}";
+
 	/// <summary>SignalR group name format every connection for a given SessionId joins in BaseHub.OnConnectedAsync, and the only scope SessionRevocationNotifier ever sends to - plan/05-device-sessions.md requires revocation to target exactly that device's own connections, never the whole account/user.</summary>
 	public static readonly string SessionGroupFormat = "session:{0}";
 }
