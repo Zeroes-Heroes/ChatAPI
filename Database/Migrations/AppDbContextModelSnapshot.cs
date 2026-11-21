@@ -1181,6 +1181,113 @@ namespace Database.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncLegacyMessageRecipientStateEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("LegacyMessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SeenClientReportedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("SeenReason")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("MembershipId", "LegacyMessageId");
+
+                    b.HasIndex("LegacyMessageId");
+
+                    b.HasIndex("ChatId", "LegacyMessageId")
+                        .HasDatabaseName("IX_SyncLegacyMessageRecipientStates_ChatId_LegacyMessageId");
+
+                    b.HasIndex("ChatId", "AccountId", "MembershipId")
+                        .HasDatabaseName("IX_SyncLegacyMsgRecipientStates_ChatId_AccountId_MembershipId");
+
+                    b.ToTable("SyncLegacyMessageRecipientStates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncLegacyMessageRecipientStates_SeenPair", "(\"SeenAtUtc\" IS NULL) = (\"SeenReason\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncLegacyMessageDeviceStateEntity", b =>
+                {
+                    b.Property<string>("LocalInstanceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("LegacyMessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("CiphertextStoredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeviceRegistrationId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MembershipId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ObservedSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("LocalInstanceId", "LegacyMessageId");
+
+                    b.HasIndex("LegacyMessageId");
+
+                    b.HasIndex("AccountId", "DeviceRegistrationId")
+                        .HasDatabaseName("IX_SyncLegacyMsgDeviceStates_AccountId_DeviceRegistrationId");
+
+                    b.HasIndex("DeviceRegistrationId", "LocalInstanceId")
+                        .HasDatabaseName("IX_SyncLegacyMsgDeviceStates_DeviceRegistrationId_InstanceId");
+
+                    b.HasIndex("ChatId", "AccountId", "MembershipId")
+                        .HasDatabaseName("IX_SyncLegacyMsgDeviceStates_ChatId_AccountId_MembershipId");
+
+                    b.ToTable("SyncLegacyMessageDeviceStates", (string)null);
+                });
+
             modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
                 {
                     b.Property<string>("MembershipId")
@@ -1628,14 +1735,24 @@ namespace Database.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("LatestUnreadLegacyMessageId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("OldestUnreadMessageId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("OldestUnreadLegacyMessageId")
+                        .HasColumnType("integer");
 
                     b.Property<long>("Version")
                         .HasColumnType("bigint");
 
                     b.HasKey("MembershipId");
+
+                    b.HasIndex("LatestUnreadLegacyMessageId");
+
+                    b.HasIndex("OldestUnreadLegacyMessageId");
 
                     b.HasIndex("ChatId", "LatestUnreadMessageId");
 
@@ -2529,9 +2646,25 @@ namespace Database.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("FK_SyncUnreadStates_ChatId_OldestUnreadMessageId_SyncMessages");
 
+                    b.HasOne("Database.Entities.MessageEntity", "LatestUnreadLegacyMessage")
+                        .WithMany()
+                        .HasForeignKey("LatestUnreadLegacyMessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncUnreadStates_LatestUnreadLegacyMessageId_Messages_Id");
+
+                    b.HasOne("Database.Entities.MessageEntity", "OldestUnreadLegacyMessage")
+                        .WithMany()
+                        .HasForeignKey("OldestUnreadLegacyMessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SyncUnreadStates_OldestUnreadLegacyMessageId_Messages_Id");
+
+                    b.Navigation("LatestUnreadLegacyMessage");
+
                     b.Navigation("LatestUnreadMessage");
 
                     b.Navigation("Membership");
+
+                    b.Navigation("OldestUnreadLegacyMessage");
 
                     b.Navigation("OldestUnreadMessage");
                 });
@@ -2585,6 +2718,68 @@ namespace Database.Migrations
                     b.Navigation("Blocker");
 
                     b.Navigation("Subject");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncLegacyMessageRecipientStateEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "AccountId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLegacyMsgRecipientStates_ChatId_AccountId_MembershipId");
+
+                    b.HasOne("Database.Entities.MessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("LegacyMessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLegacyMsgRecipientStates_LegacyMessageId_Messages_Id");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncLegacyMessageDeviceStateEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany()
+                        .HasForeignKey("ChatId", "AccountId", "MembershipId")
+                        .HasPrincipalKey("ChatId", "AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLegacyMsgDeviceStates_ChatId_AccountId_MembershipId");
+
+                    b.HasOne("Database.Entities.Sync.SyncDeviceRegistrationEntity", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId", "DeviceRegistrationId")
+                        .HasPrincipalKey("AccountId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLegacyMsgDeviceStates_AccountId_DeviceRegistrationId");
+
+                    b.HasOne("Database.Entities.Sync.SyncLocalInstanceEntity", "LocalInstance")
+                        .WithMany()
+                        .HasForeignKey("DeviceRegistrationId", "LocalInstanceId")
+                        .HasPrincipalKey("DeviceRegistrationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLegacyMsgDeviceStates_DeviceRegistrationId_InstanceId");
+
+                    b.HasOne("Database.Entities.MessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("LegacyMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncLegacyMsgDeviceStates_LegacyMessageId_Messages_Id");
+
+                    b.Navigation("LocalInstance");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
                 });
 
             modelBuilder.Entity("Database.Entities.MessageEntity", b =>

@@ -20,6 +20,8 @@ using Services.Membership.Service;
 using Services.NotificationDispatch.Interface;
 using Services.Sessions;
 using Services.Sessions.Service;
+using Services.Statuses.Interface;
+using Services.Statuses.Service;
 
 namespace MembershipTests;
 
@@ -54,12 +56,21 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			new SessionTrustChecker(db, Clock),
 			new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()),
 			Authority(db),
+			Statuses(db),
 			Hub,
 			Clock);
 
 	/// <summary>Stage 08's history/archive reader, over the same real access check the production wiring uses.</summary>
 	public IChatHistoryService History(AppDbContext db) =>
-		new ChatHistoryService(db, Authority(db), new MessageAuthorshipAuthority(), Clock);
+		new ChatHistoryService(db, Authority(db), new MessageAuthorshipAuthority(), Statuses(db), Clock);
+
+	/// <summary>
+	/// Stage 10's one owner of recipient/device statuses and unread, over the REAL access authority and
+	/// the REAL trust checker - the same objects the hub resolves, so what these tests exercise is the
+	/// production decision path, not a stand-in.
+	/// </summary>
+	public IMessageStatusService Statuses(AppDbContext db) =>
+		new MessageStatusService(db, Authority(db), new SessionTrustChecker(db, Clock), Clock);
 
 	/// <summary>
 	/// Stage 09's relation writer, over the same real trust checker every other mutation uses. The push

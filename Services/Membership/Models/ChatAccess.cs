@@ -134,3 +134,10 @@ public sealed record ChatAccess(
 		return best;
 	}
 }
+
+/// <summary>
+/// One person's access to a chat, for the surfaces that must reason about EVERY participant rather
+/// than about the caller (stage 10's group proportions). <paramref name="AccountContextId"/> is null
+/// only for a chat with no sync projection at all, where the legacy participant row is all there is.
+/// </summary>
+public sealed record ChatParticipantAccess(int LegacyUserId, string? AccountContextId, ChatAccess Access);

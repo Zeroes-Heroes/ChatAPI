@@ -36,7 +36,20 @@ public class SyncUnreadStateEntity
 
 	public DateTime? LatestUnreadCreatedAtUtc { get; set; }
 
+	/// <summary>
+	/// Stage 10: the same two pointers over the LEGACY <c>Messages</c> table, which is where every real
+	/// message lives until stage 11. Deliberately two more columns on THIS row rather than a legacy twin
+	/// table (the shape stage 08 used for its snapshots): a stint has exactly one unread counter, and a
+	/// second table would mean two counters for one membership - the one thing this row must never allow.
+	/// Both stay null while the sequence-space pointers are in use, and vice versa.
+	/// </summary>
+	public int? OldestUnreadLegacyMessageId { get; set; }
+
+	public int? LatestUnreadLegacyMessageId { get; set; }
+
 	public virtual SyncMembershipEntity Membership { get; set; } = null!;
 	public virtual SyncMessageEntity? OldestUnreadMessage { get; set; }
 	public virtual SyncMessageEntity? LatestUnreadMessage { get; set; }
+	public virtual MessageEntity? OldestUnreadLegacyMessage { get; set; }
+	public virtual MessageEntity? LatestUnreadLegacyMessage { get; set; }
 }

@@ -9,4 +9,14 @@ namespace Services.Chat.Models.GetChats;
 /// personal chat stays readable and keeps receiving status updates, which is why this is separate from
 /// <paramref name="IsArchived"/> rather than folded into it.
 /// </param>
-public record GetChatsResponse(int ChatId, string ChatName, int[] UserIds, bool IsGroup, bool IsArchived, bool CanSendNewMessages);
+/// <param name="UnreadCount">
+/// Stage 10: this caller's own unread count for the chat, from the authoritative per-stint counter
+/// ("Unread намалява еднократно за съобщение при валидно логическо прочитане за потребителя"). It is the
+/// CURRENT stint's, so a rejoin never inherits the frozen archive's unread.
+///
+/// <c>null</c> means the server keeps no counter for this chat yet - a chat created before stage 07 has
+/// no membership stint to key one by, and a stint that has never had an unread message has no row. A
+/// client must then keep its own local count instead of reading this as zero.
+/// </param>
+public record GetChatsResponse(
+	int ChatId, string ChatName, int[] UserIds, bool IsGroup, bool IsArchived, bool CanSendNewMessages, long? UnreadCount);

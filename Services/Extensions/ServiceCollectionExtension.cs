@@ -38,6 +38,8 @@ using Services.Membership.Service;
 using Services.Recovery.Interface;
 using Services.Recovery.Service;
 using Services.Sessions.Authorization;
+using Services.Statuses.Interface;
+using Services.Statuses.Service;
 using Services.Sessions.Interface;
 using Services.Sessions.Service;
 using Services.Hubs.Filters;
@@ -272,6 +274,10 @@ public static class ServiceCollectionExtension
 			.AddScoped<IPersonalRelationDirectory, PersonalRelationDirectory>()
 			.AddScoped<IProfileVisibility, ProfileVisibilityService>()
 			.AddScoped<IPersonalRelationService, PersonalRelationService>()
+			// Stage 10 recipient/device statuses and unread (Services/Statuses). Scoped like every other
+			// module that writes: its rows have to commit inside the CALLER's own transaction (the send's,
+			// the membership mutation's) and it takes the chat lock on that same AppDbContext.
+			.AddScoped<IMessageStatusService, MessageStatusService>()
 			// Author rights for a future edit/delete: a pure decision over an already-resolved ChatAccess
 			// and the caller's own claims, with no state and no database of its own.
 			.AddSingleton<IMessageAuthorshipAuthority, MessageAuthorshipAuthority>()

@@ -27,9 +27,10 @@ public interface ISessionTrustChecker
 	/// <summary>
 	/// Same check as <see cref="CheckAsync"/>, but first takes a <c>FOR UPDATE</c> lock on the caller's
 	/// device registration row AND the caller's own session row, participating in the CALLER's OWN
-	/// ambient transaction (the caller must already have one open - see <see cref="Services.Hubs.BaseHub.SendMessage"/>,
-	/// <see cref="Services.Hubs.BaseHub.ChatEntered"/> and <see cref="Services.Hubs.BaseHub.OnConnectedAsync"/>'s
-	/// own undelivered-message sweep, the hub methods that mutate state and then broadcast the result to
+	/// ambient transaction (the caller must already have one open - see <see cref="Services.Hubs.BaseHub.SendMessage"/>
+	/// and the status writes behind <see cref="Services.Hubs.BaseHub.ChatEntered"/> /
+	/// <see cref="Services.Hubs.BaseHub.ReportMessageReceipts"/> (<see cref="Services.Statuses.Interface.IMessageStatusService"/>),
+	/// the hub methods that mutate state and then broadcast the result to
 	/// ANOTHER user's connections, plus the equivalent HTTP mutation+broadcast entrypoints
 	/// (<c>ChatService.CreateChat</c>, <c>FriendshipService.AddFriend</c>/<c>RespondToFriendRequest</c>,
 	/// via <see cref="Service.TrustedMutation"/>) - <see cref="Services.Hubs.BaseHub.ChatExited"/>/

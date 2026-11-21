@@ -9,6 +9,11 @@ into the entrypoints that exist today: `POST /chat/create-chat`, the new `POST /
 > Stage 08 extends this module: `POST /chat/add-members` now carries the shared period, `FreezeAsync`
 > captures the archive's metadata/status snapshots, and `ChatAccess.Windows` folds in the shared windows.
 > See `docs/history-archives.md`.
+>
+> Stage 10 adds `DescribeParticipantsAsync` (every account that holds or held a stint, with its own
+> windows - the denominator of a message's group proportions) and routes the add's Seen marking through
+> `Services/Statuses`. The reconnect sweep that marked messages `Received` is gone: a device proves its
+> own delivery now. See `docs/recipient-status.md`.
 
 ## Chat identity and kind
 

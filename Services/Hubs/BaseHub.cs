@@ -13,11 +13,14 @@ using Services.Hubs.Models;
 using Services.Membership.Interface;
 using Services.Membership.Models;
 using Services.NotificationDispatch.Interface;
-using Services.Presence.Interface;
 using Services.Sessions;
 using Services.Sessions.Interface;
 using Services.Sessions.Models;
 using Services.Sessions.Service;
+using Services.Statuses.Interface;
+using Services.Statuses.Models;
+using Services.Sync.Contracts;
+using Services.Utilities;
 using Services.Utilities.Statics;
 using System.Security.Claims;
 
@@ -60,7 +63,6 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
-		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
 		ISessionTrustChecker trustChecker = serviceProvider.GetRequiredService<ISessionTrustChecker>();
 		ISessionConnectionRegistry connectionRegistry = serviceProvider.GetRequiredService<ISessionConnectionRegistry>();
 
@@ -107,66 +109,19 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		}
 
 		int receiverId = user.Id();
-		DateTime now = DateTime.UtcNow;
 
-		// Fresh start (plan/06): chats belonging to a superseded account context are not this context's
-		// history, so their undelivered messages are neither delivered nor acknowledged here. Empty for
-		// every account that never started over.
-		IAccountContextBoundary contextBoundary = serviceProvider.GetRequiredService<IAccountContextBoundary>();
-		// Materialized as an array: EF translates Contains over a local array/list, not over the
-		// IReadOnlySet interface method.
-		int[] excludedChatIds = [.. await contextBoundary.ExcludedLegacyChatIdsAsync(user, Context.ConnectionAborted)];
-
-		MessageEntity[] candidateMessages =
-			await dbContext.Messages
-			.Where(m =>
-				m.Chat.Users.Select(u => u.Id).Contains(receiverId)
-				&& m.SenderId != receiverId
-				&& !excludedChatIds.Contains(m.ChatId)
-				// Seen counts as received: the legacy table is a log with one row per reached status, and
-				// a recipient can genuinely reach Seen without a Received row - SendMessage's in-chat fast
-				// path writes only Seen, and stage 08 marks newly shared older history Seen at the add.
-				// Writing Received for those here would publish MessageStatusUpdate(Received) to the
-				// author, whose view then regresses Seen -> Delivered and never recovers
-				// (docs/sync-contract-v1.md: "Later device observations never replace it").
-				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId
-					&& (ms.Status == MessageStatus.Received || ms.Status == MessageStatus.Seen)))
-			.ToArrayAsync();
-
-		// Stage 07, deferred delivery: the legacy row keeps every past participant of a chat (that is what
-		// keeps a removed member's archive readable), so membership - not the legacy user list - decides
-		// what this reconnect may actually deliver and acknowledge. One shared check, the same one HTTP and
-		// live delivery use: a member added later never reaches back before its own window, and a removed
-		// member never reaches past its removal.
-		IChatAccessAuthority accessAuthority = serviceProvider.GetRequiredService<IChatAccessAuthority>();
-		IReadOnlyDictionary<int, ChatAccess> chatAccess = await accessAuthority.GetManyAsync(
-			user, [.. candidateMessages.Select(m => m.ChatId).Distinct()], Context.ConnectionAborted);
-
-		// Stage 08: a chat this caller only holds as a FROZEN archive is excluded from this sweep
-		// altogether. Marking its messages Received here would write a PUBLIC status row - visible to the
-		// authors and counted in the group's proportions - for an archive that must stay exactly as it was
-		// at the removal ("Публичните отметки и unread в замразения чат остават непроменени"). Restoring
-		// an archive on a newly authorized device goes through IChatHistoryService instead, whose
-		// confirmation updates only the private per-device record.
-		MessageEntity[] undeliveredMessages = [.. candidateMessages
-			.Where(m => chatAccess.TryGetValue(m.ChatId, out ChatAccess? access)
-				&& access.State == ChatAccessState.Active
-				&& access.PermitsMessageAt(m.CreatedAt))];
-
-		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Received, now)).ToArray();
-
-		// Authoritative recheck, locked, immediately before the actual persistence - see
-		// ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's own doc comment. SessionGuardHubFilter's
-		// own check ran once, BEFORE this method even started, and several awaited round trips (group join,
-		// registration, the query above) sit between it and this point - this closes that gap for the
-		// mutation/broadcast below specifically, same treatment SendMessage/ChatEntered already have. The
-		// commit happens strictly BEFORE the broadcast loop - a connection admitted a moment before a
-		// concurrent revoke's commit must never mark-and-publish AFTER that commit.
-		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, () =>
-		{
-			dbContext.AddRange(messageStatusEntities);
-			return dbContext.SaveChangesAsync();
-		}, Context.ConnectionAborted);
+		// Stage 10 (plan/10-recipient-status.md): this sweep used to mark every undelivered message
+		// Received for the reconnecting user and publish that to its authors. Reconnecting is not
+		// evidence of anything about a message - "Received доказва, че конкретно устройство е записало
+		// съобщението устойчиво, разполага с ключа и успешно е проверило и разшифровало съдържанието" -
+		// and the device whose connection this is may never have held the message at all. The mark now
+		// comes from that device's own receipt (the `message-receipt` method below), so nothing public is
+		// written here any more and the author sees "sent" until a device really proves delivery.
+		//
+		// The authoritative trust recheck still runs: a connection admitted a moment before a concurrent
+		// revoke's commit must not be left registered and addressable (see
+		// ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's own doc comment).
+		TrustCheckResult trust = await trustChecker.CheckAsync(user, Context.ConnectionAborted);
 
 		if (!trust.IsTrusted)
 		{
@@ -180,37 +135,6 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 
 		string cacheKey = string.Format(CacheKeys.ConnectionEstablished, receiverId);
 		await cache.SetAsync(cacheKey, true, DateTime.UtcNow.AddHours(1));
-
-		if (undeliveredMessages.Length > 0)
-		{
-			IEnumerable<IGrouping<int, MessageEntity>> messagesByChats = undeliveredMessages.GroupBy(undeliveredMessage => undeliveredMessage.ChatId);
-
-			var messagesByChatsThenBySenders = messagesByChats.Select(messagesByChat => new
-			{
-				ChatId = messagesByChat.Key,
-				SendersByChat = messagesByChat.GroupBy(message => message.SenderId)
-									.Select(messagesBySender => new
-									{
-										SenderId = messagesBySender.Key,
-										Messages = messagesBySender.ToArray()
-									})
-									.ToArray()
-			})
-			.ToArray();
-
-			foreach (var messageByChatThenBySender in messagesByChatsThenBySenders)
-			{
-				foreach (var messagesBySender in messageByChatThenBySender.SendersByChat)
-				{
-					IEnumerable<MessageEntity> messages = messagesBySender.Messages;
-					MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageByChatThenBySender.ChatId, receiverId, MessageStatus.Received, now, messages.Select(m => m.Id).ToArray());
-
-					await SendToLegacyUsersAsync(
-						Clients, contextBoundary, [messagesBySender.SenderId], messageByChatThenBySender.ChatId,
-						LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent, Context.ConnectionAborted);
-				}
-			}
-		}
 
 		await base.OnConnectedAsync();
 	}
@@ -276,7 +200,6 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
 		INotificationDispatch notificationDispatch = serviceProvider.GetRequiredService<INotificationDispatch>();
-		IPresenceService presenceService = serviceProvider.GetRequiredService<IPresenceService>();
 		ILogger<BaseHub> logger = serviceProvider.GetRequiredService<ILogger<BaseHub>>();
 		ISessionTrustChecker trustChecker = serviceProvider.GetRequiredService<ISessionTrustChecker>();
 
@@ -313,6 +236,8 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		// чата" true - a concurrent removal/leave either commits first (and this send is then refused) or
 		// waits until this message has committed.
 		bool mayPublish = false;
+		NewMessageStatusEffects statusEffects = NewMessageStatusEffects.None;
+		IMessageStatusService statusService = serviceProvider.GetRequiredService<IMessageStatusService>();
 		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, async () =>
 		{
 			ChatAccess access = await accessAuthority.LockChatAndAuthorizeAsync(user, chatId, Context.ConnectionAborted);
@@ -330,6 +255,15 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			}
 
 			insertedMessage = dbContext.Messages.Add(new MessageEntity(sendMessageEvent.Content, senderId, chatId, DateTime.UtcNow)).Entity;
+			await dbContext.SaveChangesAsync();
+
+			// Stage 10, in the SAME transaction and under the SAME chat row: every eligible recipient's
+			// unread goes up by exactly one, and this sender's own older incoming messages become
+			// logically Seen with reason OwnSend. A crash between the message and these would otherwise
+			// leave a committed message with no unread and a sender whose own send did not clear its
+			// backlog.
+			statusEffects = await statusService.RecordNewMessageAsync(
+				user, access, chatId, insertedMessage, Context.ConnectionAborted);
 			await dbContext.SaveChangesAsync();
 		}, Context.ConnectionAborted);
 
@@ -353,7 +287,12 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		// still has is what preserves that archive, so it cannot be used as the recipient list).
 		int[] receiversIds = [.. await accessAuthority.ActiveLegacyRecipientsAsync(chatId, chatParticipants, Context.ConnectionAborted)];
 
-		NewMessageCreatedEvent newMessageCreatedEvent = new(messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt);
+		// The server ACK, and nothing more: it proves the server stored the message
+		// ("Server ACK доказва успешен запис на сървъра"). Stage 10 adds the denominator of this
+		// message's group proportions - how many PEOPLE have the right to it, author excluded - because
+		// no later event carries it and the author cannot derive it from a participant list.
+		NewMessageCreatedEvent newMessageCreatedEvent = new(
+			messageEntity.Id, messageEntity.ChatId, sendMessageEvent.TempId, messageEntity.CreatedAt, statusEffects.RecipientCount);
 		NewMessageEvent newMessageEvent = new(messageEntity.Id, senderId, messageEntity.ChatId, sendMessageEvent.Content, messageEntity.CreatedAt);
 
 		await Clients
@@ -365,34 +304,13 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		await SendToLegacyUsersAsync(
 			Clients, contextBoundary, receiversIds, chatId, LiveEvents.NewMessage, newMessageEvent, Context.ConnectionAborted);
 
-		List<MessageStatusEntity> messageStatusEntities = [];
-
-		foreach (int receiverId in receiversIds)
-		{
-			bool isUserInChat = await presenceService.IsUserInChat(receiverId, chatId);
-			bool isUserOnline = await presenceService.IsUserOnline(receiverId);
-
-			MessageStatusEntity messageStatusEntity = new(messageEntity.Id, receiverId, default, DateTime.UtcNow);
-			MessageStatusUpdateEvent messageStatusUpdateEvent = new(sendMessageEvent.ChatId, receiverId, default, DateTime.UtcNow, [messageEntity.Id]);
-			messageStatusEntities.Add(messageStatusEntity);
-
-			if (isUserInChat)
-			{
-				messageStatusEntity.Status = MessageStatus.Seen;
-				messageStatusUpdateEvent.Status = MessageStatus.Seen;
-			}
-			else if (isUserOnline)
-			{
-				messageStatusEntity.Status = MessageStatus.Received;
-				messageStatusUpdateEvent.Status = MessageStatus.Received;
-			}
-			else
-				continue;
-
-			await SendToLegacyUsersAsync(
-				Clients, contextBoundary, [senderId], chatId,
-				LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent, Context.ConnectionAborted);
-		}
+		// Stage 10: presence used to be turned into a status here - "in the chat" became Seen and "online"
+		// became Received, for a device that had not confirmed anything. Both are now the recipient
+		// device's own business: it reports CiphertextStored/Received through `message-receipt` once its
+		// local write really completed, and its Seen through `chat-entered`/a Seen receipt. What this
+		// send DOES publish immediately is the sender's own OwnSend marking of its older incoming
+		// messages, committed above.
+		await PublishStatusMarksAsync(contextBoundary, chatId, statusEffects.OwnSendSeen);
 
 		try
 		{
@@ -409,9 +327,116 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		{
 			logger.LogError(ex, "Failed to dispatch push notifications for chat {ChatId}", chatId);
 		}
+	}
 
-		dbContext.MessagesStatus.AddRange(messageStatusEntities);
-		await dbContext.SaveChangesAsync();
+	/// <summary>
+	/// Publishes committed status marks to the authors they belong to, strictly AFTER the write that
+	/// produced them (stage 10). Nothing here decides anything: the marks are what
+	/// <see cref="IMessageStatusService"/> actually committed, so a crash in between costs a live event
+	/// and never a status - the next chat list / history read re-derives it from the committed rows.
+	/// </summary>
+	private async Task PublishStatusMarksAsync(
+		IAccountContextBoundary contextBoundary, int legacyChatId, IReadOnlyList<RecipientStatusMark> marks)
+	{
+		foreach (RecipientStatusMark mark in marks)
+		{
+			MessageStatusUpdateEvent statusUpdate = new(
+				legacyChatId, mark.RecipientLegacyUserId, mark.IsSeen ? MessageStatus.Seen : MessageStatus.Received,
+				mark.AtUtc, [.. mark.LegacyMessageIds]);
+
+			await SendToLegacyUsersAsync(
+				Clients, contextBoundary, [mark.AuthorLegacyUserId], legacyChatId,
+				LiveEvents.MessageStatusUpdate, statusUpdate, Context.ConnectionAborted);
+		}
+	}
+
+	/// <summary>
+	/// Stage 10 (plan/10-recipient-status.md): THE way a device proves what it holds - stored ciphertext,
+	/// a readable/received copy, or a real observation. Every rule (idempotence, the first Seen fixing
+	/// reason and time, unread, a frozen archive updating only private device progress, a terminal
+	/// NotApplicable for a stale receipt) lives in <see cref="IMessageStatusService"/>; this method only
+	/// translates the payload and publishes what was committed.
+	///
+	/// A new device proves its OWN delivery here: the row is keyed by this session's local instance, so
+	/// the person's existing public marks never stand in for a copy this device does not have.
+	///
+	/// Answers the invocation with the per-message outcome, which is what makes a stale receipt actually
+	/// terminate for the device that sent it - a refused batch answers null, the same "nothing to act on"
+	/// every other mutating hub method gives. Nothing on the client queues receipts yet (that queue is
+	/// stage 16); what this method owes the contract is a final answer, and it now returns one.
+	/// </summary>
+	// Named ReportMessageReceipts, not MessageReceipt: a method whose name equals the
+	// Services.Statuses.Models.MessageReceipt type this body uses would shadow that type inside this
+	// class. The wire name clients call is unchanged.
+	[HubMethodName("message-receipt")]
+	public async Task<MessageReceiptBatchResult?> ReportMessageReceipts(MessageReceiptBatch batch)
+	{
+		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+
+		ClaimsPrincipal? user = Context.User;
+
+		if (user == null || batch?.Receipts is null)
+			return null;
+
+		// A new account context never reports about the old context's chats (plan/06 fresh start). The
+		// access check below would refuse it anyway; this keeps the refusal identical to every other
+		// surface's.
+		IAccountContextBoundary contextBoundary = serviceProvider.GetRequiredService<IAccountContextBoundary>();
+		if (await contextBoundary.IsLegacyChatExcludedAsync(user, batch.ChatId, Context.ConnectionAborted))
+		{
+			return null;
+		}
+
+		List<MessageReceipt> receipts = [];
+		foreach (MessageReceiptItem item in batch.Receipts)
+		{
+			if (!Enum.IsDefined(typeof(ReceiptKind), item.Kind))
+			{
+				// An unknown kind is refused rather than guessed: a future kind must not silently become
+				// one of today's three.
+				continue;
+			}
+
+			ReceiptKind kind = (ReceiptKind)item.Kind;
+			receipts.Add(new MessageReceipt(
+				item.MessageId,
+				kind,
+				kind == ReceiptKind.Seen && item.ClientObservedAtUtc is DateTime observedAt
+					? new ReportedObservation(observedAt, item.WasOffline)
+					: null));
+		}
+
+		IMessageStatusService statusService = serviceProvider.GetRequiredService<IMessageStatusService>();
+		Result<ReceiptBatchResult> result = await statusService.AcceptReceiptsAsync(
+			user, batch.ChatId, receipts, Context.ConnectionAborted);
+
+		if (!result.IsSuccess)
+		{
+			if (result.StatusCode == (int)System.Net.HttpStatusCode.Unauthorized)
+			{
+				// The caller stopped being trusted while this invocation ran - same treatment as every
+				// other mutating hub method.
+				Context.Abort();
+			}
+
+			return null;
+		}
+
+		await PublishStatusMarksAsync(contextBoundary, batch.ChatId, result.Data.Marks);
+
+		// After the broadcast, like every other answer here: the outcomes describe committed state, and
+		// the caller learns them only once that state is really published.
+		return new MessageReceiptBatchResult
+		{
+			ChatId = result.Data.ChatId,
+			Outcomes = [.. result.Data.Outcomes.Select(outcome => new MessageReceiptOutcomeItem
+			{
+				MessageId = outcome.LegacyMessageId,
+				Disposition = (int)outcome.Disposition,
+				StateVersion = outcome.StateVersion,
+			})],
+		};
 	}
 
 	[HubMethodName("chat-entered")]
@@ -420,19 +445,16 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		IServiceProvider serviceProvider = scope.ServiceProvider;
 		IDistributedCache cache = serviceProvider.GetRequiredService<IDistributedCache>();
-		AppDbContext dbContext = serviceProvider.GetRequiredService<AppDbContext>();
-		ISessionTrustChecker trustChecker = serviceProvider.GetRequiredService<ISessionTrustChecker>();
 
 		int chatId = chatEnteredEvent.ChatId;
 		ClaimsPrincipal? user = Context.User;
-		DateTime now = DateTime.UtcNow;
 
 		if (user == null)
 			return;
 
 		int receiverId = user.Id();
 
-		// Same fresh-start boundary as the connect-time scan: an excluded chat is not this context's
+		// Same fresh-start boundary as every other surface: an excluded chat is not this context's
 		// history, so entering it must not mark anything seen or reveal its messages.
 		IAccountContextBoundary contextBoundary = serviceProvider.GetRequiredService<IAccountContextBoundary>();
 		if (await contextBoundary.IsLegacyChatExcludedAsync(user, chatId, Context.ConnectionAborted))
@@ -440,10 +462,10 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 			return;
 		}
 
-		// Stage 07: a read-only archive publishes nothing. Entering a chat whose membership has ended must
-		// neither mark its messages Seen for everyone else nor register this caller as present in it (which
-		// would make a later sender's own fast path mark its message Seen for a non-member) - the private
-		// device-side progress of an archive is stage 08's concern, not a public mark here.
+		// Stage 07: a read-only archive publishes nothing - entering it must neither mark its messages Seen
+		// for everyone else nor register this caller as present in it. The presence cache is this hub's own
+		// concern (the push path reads it); the statuses are the status service's, which re-reads rights
+		// under the chat lock inside its own transaction and refuses an archive there too.
 		IChatAccessAuthority accessAuthority = serviceProvider.GetRequiredService<IChatAccessAuthority>();
 		ChatAccess access = await accessAuthority.GetAsync(user, chatId, Context.ConnectionAborted);
 		if (!access.CanSend)
@@ -456,68 +478,24 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		await cache.SetAsync(cacheKey, chatId, DateTime.UtcNow.AddDays(1));
 		await cache.SetAsync(userCurrentChatIdKey, chatId, DateTime.UtcNow.AddDays(1));
 
-		MessageEntity[] unSeenMessages =
-			[.. (await dbContext.Messages
-				.Where(
-					m => m.ChatId == chatEnteredEvent.ChatId
-					&& m.SenderId != receiverId
-					&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId && ms.Status == MessageStatus.Seen))
-				.ToArrayAsync())
-				// Only messages this membership actually permits: a participant added later must not mark
-				// the chat's earlier history - which it never received - as Seen for its authors.
-				.Where(m => access.PermitsMessageAt(m.CreatedAt))];
+		// Stage 10: the chat being open is an OBSERVATION of this person, recorded in the logical model
+		// with reason Observed - the first accepted transition fixes its time and takes the message out of
+		// unread exactly once. This device's own observation is recorded separately, per local instance.
+		// Per-message visibility (50 % for 500 ms, invisible mode, a covering screen) is stage 17.
+		IMessageStatusService statusService = serviceProvider.GetRequiredService<IMessageStatusService>();
+		Result<ReceiptBatchResult> result = await statusService.MarkChatObservedAsync(user, chatId, Context.ConnectionAborted);
 
-		if (unSeenMessages.Length == 0)
+		if (!result.IsSuccess)
 		{
-			return;
-		}
-
-		IEnumerable<IGrouping<int, MessageEntity>> messagesByChats = unSeenMessages.GroupBy(undeliveredMessage => undeliveredMessage.ChatId);
-
-		var messagesByChatsThenBySenders = messagesByChats.Select(messagesByChat => new
-		{
-			ChatId = messagesByChat.Key,
-			SendersByChat = messagesByChat.GroupBy(message => message.SenderId)
-								.Select(messagesBySender => new
-								{
-									SenderId = messagesBySender.Key,
-									Messages = messagesBySender.ToArray()
-								})
-								.ToArray()
-		})
-		.ToArray();
-
-		MessageStatusEntity[] messageStatusEntities = unSeenMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Seen, now)).ToArray();
-
-		// Same TOCTOU concern/fix as SendMessage above (see ISessionTrustChecker.CheckAndLockDeviceForMutationAsync's
-		// own doc comment): this marks messages Seen and then broadcasts that status to each original
-		// sender below - an authenticated mutation that publishes to ANOTHER user, not merely this
-		// caller's own bookkeeping, so SessionGuardHubFilter's guard-on-entry alone is not enough here
-		// either. Persist is locked+committed first; the broadcast loop only runs after.
-		TrustCheckResult trust = await TrustedMutation.RunAsync(dbContext, trustChecker, user, () =>
-		{
-			dbContext.AddRange(messageStatusEntities);
-			return dbContext.SaveChangesAsync();
-		}, Context.ConnectionAborted);
-
-		if (!trust.IsTrusted)
-		{
-			Context.Abort();
-			return;
-		}
-
-		foreach (var messageByChatThenBySender in messagesByChatsThenBySenders)
-		{
-			foreach (var messagesBySender in messageByChatThenBySender.SendersByChat)
+			if (result.StatusCode == (int)System.Net.HttpStatusCode.Unauthorized)
 			{
-				IEnumerable<MessageEntity> messages = messagesBySender.Messages;
-				MessageStatusUpdateEvent messageStatusUpdateEvent = new(messageByChatThenBySender.ChatId, receiverId, MessageStatus.Seen, now, messages.Select(m => m.Id).ToArray());
-
-				await SendToLegacyUsersAsync(
-					Clients, contextBoundary, [messagesBySender.SenderId], messageByChatThenBySender.ChatId,
-					LiveEvents.MessageStatusUpdate, messageStatusUpdateEvent, Context.ConnectionAborted);
+				Context.Abort();
 			}
+
+			return;
 		}
+
+		await PublishStatusMarksAsync(contextBoundary, chatId, result.Data.Marks);
 	}
 
 	[HubMethodName("chat-exited")]

@@ -12,6 +12,8 @@ using Services.History.Models;
 using Services.Membership.Interface;
 using Services.Membership.Models;
 using Services.Sessions;
+using Services.Statuses.Interface;
+using Services.Statuses.Models;
 using Services.Utilities;
 
 namespace Services.History.Service;
@@ -25,7 +27,7 @@ namespace Services.History.Service;
 /// </summary>
 public sealed class ChatHistoryService(
 	AppDbContext db, IChatAccessAuthority accessAuthority, IMessageAuthorshipAuthority authorship,
-	TimeProvider timeProvider) : IChatHistoryService
+	IMessageStatusService statuses, TimeProvider timeProvider) : IChatHistoryService
 {
 	/// <summary>Upper bound on one page, so a client cannot ask for an unbounded scan (docs/sync-contract-v1.md: pages are bounded and must advance or terminate).</summary>
 	public const int MaxPageSize = 100;
@@ -96,7 +98,7 @@ public sealed class ChatHistoryService(
 			permitted.Add((message.Id, message.SenderId, message.Content, message.CreatedAt, window));
 		}
 
-		IReadOnlyDictionary<int, IReadOnlyList<ChatHistoryStatus>> statuses = await ResolveStatusesAsync(permitted, ct);
+		IReadOnlyDictionary<int, MessageStatusSummary> resolved = await ResolveStatusesAsync(legacyChatId, permitted, ct);
 
 		// Stage 09: the author rights a future edit/delete will need, decided by the one authority rather
 		// than by each surface comparing sender ids. A frozen window still produces them - that is the
@@ -112,7 +114,8 @@ public sealed class ChatHistoryService(
 			m.Window.IsFrozen,
 			storedHere.Contains(m.Id),
 			revisable.Contains(m.Id),
-			statuses.TryGetValue(m.Id, out IReadOnlyList<ChatHistoryStatus>? s) ? s : Array.Empty<ChatHistoryStatus>()))];
+			resolved.TryGetValue(m.Id, out MessageStatusSummary? s) ? s.Statuses : Array.Empty<ChatHistoryStatus>(),
+			resolved.TryGetValue(m.Id, out MessageStatusSummary? r) ? r.RecipientCount : 0))];
 
 		// Complete exactly when the scan itself ran out of rows - never when the FILTERED page is empty,
 		// which happens routinely for a stretch that falls in an inaccessible gap.
@@ -238,15 +241,18 @@ public sealed class ChatHistoryService(
 	}
 
 	/// <summary>
-	/// The one resolution rule of this stage: a frozen window answers from its own stint's snapshot
-	/// ("Резолюцията на архивните метаданни и статуси е към посочения snapshot, не към днешното
-	/// състояние"), everything else from the live rows. Both sources are read in one query each.
+	/// Two resolution rules, unchanged in spirit from stage 08: a frozen window answers from its own
+	/// stint's snapshot ("Резолюцията на архивните метаданни и статуси е към посочения snapshot, не към
+	/// днешното състояние"), everything else from today's state. Stage 10 makes the second half the
+	/// status module's answer rather than a second reading of the legacy log, and adds the proportions'
+	/// denominator - the people with the right to each message, author excluded.
 	/// </summary>
-	private async Task<IReadOnlyDictionary<int, IReadOnlyList<ChatHistoryStatus>>> ResolveStatusesAsync(
+	private async Task<IReadOnlyDictionary<int, MessageStatusSummary>> ResolveStatusesAsync(
+		int legacyChatId,
 		IReadOnlyList<(int Id, int SenderId, string Content, DateTime CreatedAt, LegacyHistoryWindow Window)> permitted,
 		CancellationToken ct)
 	{
-		Dictionary<int, IReadOnlyList<ChatHistoryStatus>> result = [];
+		Dictionary<int, MessageStatusSummary> result = [];
 		if (permitted.Count == 0)
 		{
 			return result;
@@ -257,15 +263,14 @@ public sealed class ChatHistoryService(
 
 		if (liveIds.Length > 0)
 		{
-			List<MessageStatusEntity> live = await db.MessagesStatus.AsNoTracking()
-				.Where(s => liveIds.Contains(s.MessageId))
-				.ToListAsync(ct);
-
-			foreach (IGrouping<int, MessageStatusEntity> byMessage in live.GroupBy(s => s.MessageId))
+			IReadOnlyDictionary<int, MessageStatusView> live = await statuses.DescribeAsync(legacyChatId, liveIds, ct);
+			foreach (KeyValuePair<int, MessageStatusView> entry in live)
 			{
-				result[byMessage.Key] = [.. byMessage
-					.GroupBy(s => s.ReceiverId)
-					.Select(byReceiver => Highest(byReceiver))];
+				result[entry.Key] = new MessageStatusSummary(
+					entry.Value.RecipientCount,
+					[.. entry.Value.Recipients
+						.Where(r => r.ReceivedAtUtc is not null || r.SeenAtUtc is not null)
+						.Select(ToStatus)]);
 			}
 		}
 
@@ -274,9 +279,11 @@ public sealed class ChatHistoryService(
 			// Keyed by the stint each message is frozen under, so a chat the caller has left twice answers
 			// each stretch from ITS OWN archive rather than from the latest snapshot.
 			Dictionary<int, string> stintOf = [];
+			Dictionary<int, int> senderOf = [];
 			foreach (var message in permitted.Where(m => m.Window.IsFrozen && m.Window.MembershipId is not null))
 			{
 				stintOf[message.Id] = message.Window.MembershipId!;
+				senderOf[message.Id] = message.SenderId;
 			}
 
 			string[] stints = [.. stintOf.Values.Distinct()];
@@ -288,23 +295,36 @@ public sealed class ChatHistoryService(
 				.Where(s => stintOf.TryGetValue(s.LegacyMessageId, out string? stint) && string.Equals(stint, s.MembershipId, StringComparison.Ordinal))
 				.GroupBy(s => s.LegacyMessageId))
 			{
-				result[byMessage.Key] = [.. byMessage
-					.Select(ToStatus)
-					.Where(s => s is not null)
-					.Select(s => s!)];
+				// The archive's own denominator. The freeze writes one row per person ENTITLED to that
+				// message back then - including the ones that had reached no status at all, whose row
+				// carries two null timestamps (ChatMembershipService.CaptureArchiveAsync) - so the row
+				// count IS "хората с право върху съответното съобщение". The author is excluded here as
+				// well as there: a stray self-status row must not inflate a proportion.
+				int senderId = senderOf.TryGetValue(byMessage.Key, out int sender) ? sender : 0;
+				result[byMessage.Key] = new MessageStatusSummary(
+					byMessage.Select(s => s.RecipientLegacyUserId).Where(id => id != senderId).Distinct().Count(),
+					[.. byMessage
+						.Where(s => s.RecipientLegacyUserId != senderId)
+						.Select(ToStatus)
+						.Where(s => s is not null)
+						.Select(s => s!)]);
 			}
 		}
 
 		return result;
 	}
 
-	/// <summary>The legacy table is a log with one row per status; a recipient's view is the highest one it reached.</summary>
-	private static ChatHistoryStatus Highest(IGrouping<int, MessageStatusEntity> byReceiver)
-	{
-		MessageStatusEntity? seen = byReceiver.FirstOrDefault(s => s.Status == MessageStatus.Seen);
-		MessageStatusEntity chosen = seen ?? byReceiver.First();
-		return new ChatHistoryStatus(byReceiver.Key, chosen.Status, chosen.Timestamp);
-	}
+	/// <summary>What one message's statuses resolved to, before they are put on the page.</summary>
+	private sealed record MessageStatusSummary(int RecipientCount, IReadOnlyList<ChatHistoryStatus> Statuses);
+
+	/// <summary>
+	/// The legacy-shaped projection of one person's logical state: Seen implies Received, so the page
+	/// carries the highest one reached, exactly as the pre-stage-10 log did.
+	/// </summary>
+	private static ChatHistoryStatus ToStatus(RecipientStatus status) =>
+		status.SeenAtUtc is DateTime seenAt
+			? new ChatHistoryStatus(status.RecipientLegacyUserId, MessageStatus.Seen, seenAt)
+			: new ChatHistoryStatus(status.RecipientLegacyUserId, MessageStatus.Received, status.ReceivedAtUtc!.Value);
 
 	private static ChatHistoryStatus? ToStatus(SyncMembershipLegacyStatusSnapshotEntity snapshot) =>
 		snapshot.SeenAtUtc is DateTime seenAt

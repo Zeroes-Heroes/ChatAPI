@@ -14,7 +14,8 @@ namespace Services.Sessions.Service;
 /// commit from completing its own write afterward. Opens one transaction on the SAME <see cref="AppDbContext"/>
 /// the caller's own mutation uses, takes the device(+session) lock, and - only if the caller is still
 /// trusted under it - runs the supplied mutation and commits; otherwise rolls back without running it.
-/// Used by <see cref="Hubs.BaseHub"/>'s <c>SendMessage</c>/<c>ChatEntered</c>/<c>OnConnectedAsync</c> and
+/// Used by <see cref="Hubs.BaseHub"/>'s <c>SendMessage</c>, by the status writes behind its
+/// <c>chat-entered</c>/<c>message-receipt</c> methods (<see cref="Statuses.Service.MessageStatusService"/>) and
 /// by the HTTP mutation+broadcast entrypoints (<c>ChatService.CreateChat</c>,
 /// <c>FriendshipService.AddFriend</c>/<c>RespondToFriendRequest</c>) - one focused helper, not a
 /// per-call-site copy of the same transaction/lock/rollback boilerplate.

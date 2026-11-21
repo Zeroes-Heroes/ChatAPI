@@ -17,6 +17,12 @@ namespace Services.History.Models;
 /// later stage; this is the prepared right, and any such operation must re-ask the authority and
 /// re-validate trust at the moment of the write.
 /// </param>
+/// <param name="RecipientCount">
+/// Stage 10: how many PEOPLE have the right to this message, author excluded - the denominator of its
+/// group proportions ("Груповите пропорции броят хората с право върху съответното съобщение, изключвайки
+/// автора"). For a frozen window it is the archive's own count, resolved at that stint's snapshot. The
+/// numerators are <paramref name="Statuses"/>: one entry per recipient that has reached Received or Seen.
+/// </param>
 public sealed record ChatHistoryMessage(
 	int MessageId,
 	int SenderId,
@@ -25,7 +31,8 @@ public sealed record ChatHistoryMessage(
 	bool IsFrozen,
 	bool StoredOnThisDevice,
 	bool CanAuthorRevise,
-	IReadOnlyList<ChatHistoryStatus> Statuses);
+	IReadOnlyList<ChatHistoryStatus> Statuses,
+	int RecipientCount);
 
 /// <param name="Status">The highest status this recipient reached: <see cref="MessageStatus.Seen"/> implies it was received too.</param>
 public sealed record ChatHistoryStatus(int ReceiverId, MessageStatus Status, DateTime Timestamp);

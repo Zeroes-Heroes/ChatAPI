@@ -13,9 +13,12 @@ namespace Services.Membership.Interface;
 /// <item>Socket - <see cref="Services.Hubs.BaseHub"/>'s <c>send-message</c> (publish right, re-checked
 /// under the chat lock inside the write transaction) and <c>chat-entered</c> (a frozen member marks
 /// nothing Seen).</item>
-/// <item>Deferred delivery - the reconnect sweep in <c>OnConnectedAsync</c> (which undelivered messages
-/// may be delivered and acknowledged at all) and the push fan-out (checked immediately before sending,
-/// per MESSAGE_SYNC_ANALYSIS.md).</item>
+/// <item>Statuses - <see cref="Services.Statuses.Interface.IMessageStatusService"/> (every device
+/// receipt, every logical Seen and the unread counter behind them), which re-reads rights through
+/// <see cref="LockChatAndAuthorizeAsync"/> inside its own write transaction.</item>
+/// <item>Deferred delivery - the push fan-out (checked immediately before sending, per
+/// MESSAGE_SYNC_ANALYSIS.md). The stage-07 reconnect sweep that used to mark messages Received is gone:
+/// stage 10 requires a device's own proof for that.</item>
 /// </list>
 /// Stage 09 adds one more input to the same answer: for a PERSONAL chat it also asks
 /// <see cref="Services.Contacts.Interface.IPersonalRelationDirectory"/> whether the two people may still
@@ -63,6 +66,21 @@ public interface IChatAccessAuthority
 	/// boundary, because an explicit AccountContextId already names exactly one context.
 	/// </summary>
 	Task<ChatAccess> GetForAccountAsync(string accountContextId, int legacyChatId, CancellationToken ct = default);
+
+	/// <summary>
+	/// Every CURRENT account context that holds - or has ever held - a stint in this chat, with the same
+	/// <see cref="ChatAccess"/> each of them would get for itself. A superseded context (plan/06 fresh
+	/// start) is left out: it can never read this chat again, so it holds no right to any message in it
+	/// and must not be counted as a second person. Stage 10 needs it for the one question
+	/// no single-caller answer can give: "how many PEOPLE have the right to this exact message"
+	/// (plan/10-recipient-status.md: "Груповите пропорции броят хората с право върху съответното
+	/// съобщение, изключвайки автора") - a removed member still counts for the messages its archive
+	/// permits, and a member added later does not count for anything before its own window.
+	///
+	/// Deliberately not a rights check for anybody: it answers about a chat, for a caller that has
+	/// already been authorized for that chat by one of the methods above.
+	/// </summary>
+	Task<IReadOnlyList<ChatParticipantAccess>> DescribeParticipantsAsync(int legacyChatId, CancellationToken ct = default);
 
 	/// <summary>
 	/// Of <paramref name="candidateLegacyUserIds"/>, those whose CURRENT account context is an active

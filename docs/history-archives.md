@@ -42,6 +42,10 @@ adds, in the same transaction and under the same chat lock:
   exit: everyone still active, plus the departing member recorded as no longer taking part.
 - `SyncMembershipLegacyStatusSnapshots` - the public status of every permitted legacy message, for every
   recipient of it, so both the group proportions and the author's individual view stay rebuildable.
+  Stage 10 made that literal: a row is written for every person **entitled** to the message at the exit
+  (author excluded), with null timestamps where that person had reached no status, so the row count is
+  the proportion's denominator and not merely "who happened to have reported something"
+  (`docs/recipient-status.md`, "Group proportions").
 
 Both exist because the live rows keep changing for the chat's remaining members: without the copies the
 archive would drift, and "Последващи съобщения, статуси, имена и промени в състава остават извън
@@ -139,11 +143,11 @@ distinct (verified in SQL).
 
 ## Later-stage obligations
 
-1. **Server unread and sync priority (stages 10/13/15).** `SyncUnreadStates` is keyed by `MembershipId`,
-   so an old stint's unread is structurally outside the new stint's - which is what makes "старият
-   архивен unread се изключва от текущия приоритет" true - but no server surface computes unread yet, so
-   stage 08 writes no counter. The client-visible part (a rejoin does not inherit archive unread) is
-   implemented.
+1. **Server unread and sync priority (stages 10/13/15)** — the unread half is **done** in stage 10:
+   `SyncUnreadStates` (plus its legacy message pointers) is now written and read per membership stint,
+   so a rejoin answers its new stint's counter and never the frozen archive's. The sync priority set
+   remains stages 13/15. The Seen marking this stage performs at an add now goes through
+   `Services/Statuses` with reason `HistoryShared` - see `docs/recipient-status.md`.
 2. **Key grants (stages 11-13).** `IChatHistoryService` is the gate a message-key grant must pass; the
    legacy history it serves today is plaintext legacy content, not key-protected packages.
 3. **`SyncMembershipMessageStatusSnapshots`** (sequence space) stays unwritten until `SyncMessages`

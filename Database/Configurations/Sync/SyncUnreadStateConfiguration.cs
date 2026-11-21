@@ -55,5 +55,23 @@ internal class SyncUnreadStateConfiguration : IEntityTypeConfiguration<SyncUnrea
 			.HasPrincipalKey(m => new { m.ChatId, m.Id })
 			.HasConstraintName("FK_SyncUnreadStates_ChatId_LatestUnreadMessageId_SyncMessages")
 			.OnDelete(DeleteBehavior.Restrict);
+
+		// Stage 10: the legacy counterparts of the two pointers above. Plain single-column FKs - the
+		// legacy Messages row carries its own integer ChatId, which this row's sync ChatId is the decimal
+		// string of, so there is no composite principal key to pin against; the status service writes
+		// them only from a message it has already authorized in THIS chat.
+		builder
+			.HasOne(e => e.OldestUnreadLegacyMessage)
+			.WithMany()
+			.HasForeignKey(e => e.OldestUnreadLegacyMessageId)
+			.HasConstraintName("FK_SyncUnreadStates_OldestUnreadLegacyMessageId_Messages_Id")
+			.OnDelete(DeleteBehavior.Restrict);
+
+		builder
+			.HasOne(e => e.LatestUnreadLegacyMessage)
+			.WithMany()
+			.HasForeignKey(e => e.LatestUnreadLegacyMessageId)
+			.HasConstraintName("FK_SyncUnreadStates_LatestUnreadLegacyMessageId_Messages_Id")
+			.OnDelete(DeleteBehavior.Restrict);
 	}
 }

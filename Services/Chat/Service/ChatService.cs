@@ -18,6 +18,7 @@ using Services.Repositories.User.Interface;
 using Services.Sessions.Interface;
 using Services.Sessions.Models;
 using Services.Sessions.Service;
+using Services.Statuses.Interface;
 using Services.Utilities;
 using static Services.Utilities.Statics.LiveEvents;
 
@@ -27,7 +28,8 @@ internal class ChatService(
 	IChatRepository chatRepository, IUserRepository userRepository, IFriendshipRepository friendshipRepository,
 	IHubContext<BaseHub> hubContext, INotificationDispatch notificationDispatch,
 	AppDbContext dbContext, ISessionTrustChecker trustChecker,
-	IChatMembershipService membershipService, IChatAccessAuthority accessAuthority) : IChatService
+	IChatMembershipService membershipService, IChatAccessAuthority accessAuthority,
+	IMessageStatusService statuses) : IChatService
 {
 	public async Task<Result> CreateChat(CreateChatRequest createChatRequest, int chatCreatorId, ClaimsPrincipal actingUser)
 	{
@@ -142,6 +144,9 @@ internal class ChatService(
 		IReadOnlyDictionary<int, ChatAccess> access = await accessAuthority.GetManyAsync(actingUser, chatIds);
 		IReadOnlyDictionary<int, ChatMembershipView> views = await membershipService.DescribeAsync(actingUser, chatIds);
 
+		// Stage 10: the server's own unread counter per chat, for the chats it actually keeps one for.
+		IReadOnlyDictionary<int, long> unread = await statuses.UnreadCountsAsync(actingUser, chatIds);
+
 		List<GetChatsResponse> chatsResponse = [];
 		foreach (ChatEntity chat in chats)
 		{
@@ -160,7 +165,10 @@ internal class ChatService(
 			// Stage 09: the same authority answers whether new correspondence is possible, so the list and
 			// the hub's send-message refusal can never disagree about one chat.
 			chatsResponse.Add(new GetChatsResponse(
-				chat.Id, chat.Name!, [.. view.MemberLegacyUserIds], view.IsGroup, view.IsArchived, chatAccess.CanSendNewMessages));
+				chat.Id, chat.Name!, [.. view.MemberLegacyUserIds], view.IsGroup, view.IsArchived, chatAccess.CanSendNewMessages,
+				// Absent (null), not zero, for a chat with no counter: the client keeps its own local count
+				// there rather than being told the chat is read.
+				unread.TryGetValue(chat.Id, out long count) ? count : null));
 		}
 
 		return Result<GetChatsResponse[]>.Success([.. chatsResponse]);

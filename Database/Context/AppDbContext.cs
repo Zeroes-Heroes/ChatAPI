@@ -70,6 +70,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	// row cannot express; the friend-request lifecycle itself stays on that row.
 	public DbSet<SyncPersonalBlockEntity> SyncPersonalBlocks { get; set; }
 
+	// Recipient/device statuses and unread (plan 10), over the legacy Messages table for the same
+	// reason as plan 08's pair above: the sequence-space state tables are keyed by a SyncMessages id
+	// and cannot describe a legacy message. Unread itself is NOT duplicated - SyncUnreadStates gains
+	// the legacy message pointers instead, so a stint keeps exactly one counter.
+	public DbSet<SyncLegacyMessageRecipientStateEntity> SyncLegacyMessageRecipientStates { get; set; }
+	public DbSet<SyncLegacyMessageDeviceStateEntity> SyncLegacyMessageDeviceStates { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -122,5 +129,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		modelBuilder.ApplyConfiguration(new SyncArchiveDeviceDeliveryConfiguration());
 
 		modelBuilder.ApplyConfiguration(new SyncPersonalBlockConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncLegacyMessageRecipientStateConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncLegacyMessageDeviceStateConfiguration());
 	}
 }

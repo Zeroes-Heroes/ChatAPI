@@ -108,6 +108,68 @@ public sealed class ChatAccessAuthority(
 		return await GetAsync(caller, legacyChatId, ct);
 	}
 
+	public async Task<IReadOnlyList<ChatParticipantAccess>> DescribeParticipantsAsync(int legacyChatId, CancellationToken ct = default)
+	{
+		string chatId = SyncChatIdentity.IdOf(legacyChatId);
+
+		// Superseded account contexts are excluded (plan/06 fresh start): a phone that started over keeps
+		// its stints on the ended context, which can never read this chat again - so it holds no right to
+		// any message in it. Counting it would both inflate the group proportions (the same person would
+		// appear twice once the fresh context rejoins) and raise an unread counter nobody can ever read.
+		// The same filter the archive's own composition snapshot applies.
+		List<SyncMembershipEntity> stints = await db.SyncMemberships.AsNoTracking()
+			.Where(m => m.ChatId == chatId && m.Account.EndedAtUtc == null)
+			.ToListAsync(ct);
+
+		if (stints.Count == 0)
+		{
+			// Nothing came back for one of two very different reasons, and only the PROJECTION can tell
+			// them apart: a chat created before stage 07 has no membership history at all and keeps its
+			// unrestricted legacy reading, while a projected chat whose every stint belongs to a
+			// superseded context simply has no participants and must not fall through to it. Asked only
+			// here, because any live stint already proves the projection exists.
+			if (await db.SyncChats.AsNoTracking().AnyAsync(c => c.Id == chatId, ct))
+			{
+				return [];
+			}
+
+			// Its legacy participant list IS its composition, each one unrestricted - the same fallback
+			// every other answer here gives.
+			List<int> legacyParticipants = await db.Chats.AsNoTracking()
+				.Where(c => c.Id == legacyChatId)
+				.SelectMany(c => c.Users.Select(u => u.Id))
+				.ToListAsync(ct);
+
+			return [.. legacyParticipants.Select(id => new ChatParticipantAccess(id, null, ChatAccess.UnboundedActive))];
+		}
+
+		string[] stintIds = [.. stints.Select(m => m.Id)];
+		List<SyncMembershipSharedHistoryWindowEntity> sharedWindows = await db.SyncMembershipSharedHistoryWindows.AsNoTracking()
+			.Where(w => stintIds.Contains(w.MembershipId))
+			.ToListAsync(ct);
+
+		string[] accountIds = [.. stints.Select(m => m.AccountId).Distinct()];
+		Dictionary<string, int> legacyUserOf = await db.SyncAccounts.AsNoTracking()
+			.Where(a => accountIds.Contains(a.Id))
+			.ToDictionaryAsync(a => a.Id, a => a.LegacyUserId, StringComparer.Ordinal, ct);
+
+		List<ChatParticipantAccess> participants = [];
+		foreach (IGrouping<string, SyncMembershipEntity> byAccount in stints.GroupBy(m => m.AccountId, StringComparer.Ordinal))
+		{
+			if (!legacyUserOf.TryGetValue(byAccount.Key, out int legacyUserId))
+			{
+				continue;
+			}
+
+			// The personal-correspondence gate is deliberately NOT applied: it only ever narrows the right
+			// to create NEW messages, and this answer is about who has rights to messages that already
+			// exist - a blocked pair keeps receiving each other's status updates (stage 09).
+			participants.Add(new ChatParticipantAccess(legacyUserId, byAccount.Key, BuildAccess([.. byAccount], sharedWindows)));
+		}
+
+		return participants;
+	}
+
 	public async Task<IReadOnlyList<int>> ActiveLegacyRecipientsAsync(
 		int legacyChatId, IReadOnlyCollection<int> candidateLegacyUserIds, CancellationToken ct = default)
 	{
@@ -202,37 +264,45 @@ public sealed class ChatAccessAuthority(
 				continue;
 			}
 
-			// The union of every stint's windows: its participation window plus whatever older history was
-			// shared with it when it was added. A rejoin therefore keeps the old frozen archive AND the
-			// newly shared period AND everything from the rejoin onwards, with any gap between them
-			// covered by no window at all - "Междинните периоди се показват само ако изрично попадат в
-			// новото разрешение."
-			List<LegacyHistoryWindow> windows = [];
-			foreach (SyncMembershipEntity stint in own.OrderBy(m => m.CreatedAtUtc))
-			{
-				bool frozen = stint.State != SyncMembershipState.Active;
-				windows.Add(new LegacyHistoryWindow(
-					stint.LegacyHistoryFromUtc, frozen ? stint.EndedAtUtc : null, stint.Id, frozen));
-
-				foreach (SyncMembershipSharedHistoryWindowEntity shared in sharedWindows
-					.Where(w => string.Equals(w.MembershipId, stint.Id, StringComparison.Ordinal))
-					.OrderBy(w => w.FromUtc))
-				{
-					// A shared window belongs to the stint it was granted to, so it is frozen exactly when
-					// that stint is: a member removed again keeps the period that was shared with it, as an
-					// archive, and the status resolution for it follows that stint's own snapshot.
-					windows.Add(new LegacyHistoryWindow(shared.FromUtc, shared.ThroughUtc, stint.Id, frozen));
-				}
-			}
-
-			ChatAccessState state = own.Any(m => m.State == SyncMembershipState.Active)
-				? ChatAccessState.Active
-				: ChatAccessState.Frozen;
-
-			result[legacyChatId] = new ChatAccess(state, windows, suspended);
+			result[legacyChatId] = BuildAccess(own, sharedWindows) with { PersonalCorrespondenceSuspended = suspended };
 		}
 
 		return result;
+	}
+
+	/// <summary>
+	/// One account's stints in ONE chat turned into the union of permitted windows: each stint's
+	/// participation window plus whatever older history was shared with it when it was added. A rejoin
+	/// therefore keeps the old frozen archive AND the newly shared period AND everything from the rejoin
+	/// onwards, with any gap between them covered by no window at all - "Междинните периоди се показват
+	/// само ако изрично попадат в новото разрешение."
+	/// </summary>
+	private static ChatAccess BuildAccess(
+		IReadOnlyList<SyncMembershipEntity> own, IReadOnlyList<SyncMembershipSharedHistoryWindowEntity> sharedWindows)
+	{
+		List<LegacyHistoryWindow> windows = [];
+		foreach (SyncMembershipEntity stint in own.OrderBy(m => m.CreatedAtUtc))
+		{
+			bool frozen = stint.State != SyncMembershipState.Active;
+			windows.Add(new LegacyHistoryWindow(
+				stint.LegacyHistoryFromUtc, frozen ? stint.EndedAtUtc : null, stint.Id, frozen));
+
+			foreach (SyncMembershipSharedHistoryWindowEntity shared in sharedWindows
+				.Where(w => string.Equals(w.MembershipId, stint.Id, StringComparison.Ordinal))
+				.OrderBy(w => w.FromUtc))
+			{
+				// A shared window belongs to the stint it was granted to, so it is frozen exactly when
+				// that stint is: a member removed again keeps the period that was shared with it, as an
+				// archive, and the status resolution for it follows that stint's own snapshot.
+				windows.Add(new LegacyHistoryWindow(shared.FromUtc, shared.ThroughUtc, stint.Id, frozen));
+			}
+		}
+
+		ChatAccessState state = own.Any(m => m.State == SyncMembershipState.Active)
+			? ChatAccessState.Active
+			: ChatAccessState.Frozen;
+
+		return new ChatAccess(state, windows);
 	}
 
 	/// <summary>
