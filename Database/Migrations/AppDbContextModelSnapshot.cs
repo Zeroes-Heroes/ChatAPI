@@ -725,8 +725,18 @@ namespace Database.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("ChatId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FormatVersion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("KeyVersion")
                         .IsRequired()
@@ -741,11 +751,19 @@ namespace Database.Migrations
                         .IsRequired()
                         .HasColumnType("bytea");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<byte[]>("Tag")
                         .IsRequired()
                         .HasColumnType("bytea");
 
                     b.HasKey("MessageId");
+
+                    b.HasIndex("ChatId", "MessageId")
+                        .IsUnique();
 
                     b.ToTable("SyncMessageKeys", (string)null);
                 });
@@ -1401,10 +1419,11 @@ namespace Database.Migrations
                 {
                     b.HasOne("Database.Entities.Sync.SyncMessageEntity", "Message")
                         .WithOne("Key")
-                        .HasForeignKey("Database.Entities.Sync.SyncMessageKeyEntity", "MessageId")
+                        .HasForeignKey("Database.Entities.Sync.SyncMessageKeyEntity", "ChatId", "MessageId")
+                        .HasPrincipalKey("Database.Entities.Sync.SyncMessageEntity", "ChatId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("FK_SyncMessageKeys_MessageId_SyncMessages_Id");
+                        .HasConstraintName("FK_SyncMessageKeys_ChatId_MessageId_SyncMessages_ChatId_Id");
 
                     b.Navigation("Message");
                 });
