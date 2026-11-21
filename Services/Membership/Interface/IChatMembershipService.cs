@@ -44,15 +44,23 @@ public interface IChatMembershipService
 	/// Adds participants to a group, effective immediately and without any invitation being accepted.
 	/// Refused for a direct chat (it keeps its personal type), for a caller without an active stint, for
 	/// a participant who is already active (an active member is never re-added to widen their history),
-	/// and for a participant who has blocked the caller. New participants start with no previous history
-	/// - choosing a shared period is stage 08.
+	/// and for a participant who has blocked the caller.
+	///
+	/// Stage 08: <paramref name="sharedHistory"/> is the period the adder chose. What is actually granted
+	/// is the INTERSECTION of that period with the history the adder itself may read, computed here from
+	/// the server clock under the chat lock, so an adder can never share something it cannot see and its
+	/// own inaccessible gaps stay inaccessible. The messages inside the granted windows are marked
+	/// logically Seen for the added member (no unread, no "new incoming" notification). Null means
+	/// <see cref="SharedHistorySelection.None"/> - no previous history, which is what stage 07 always did.
 	/// </summary>
-	Task<Result<ChatMembershipChange>> AddMembersAsync(ClaimsPrincipal actingUser, int legacyChatId, IReadOnlyCollection<int> targetLegacyUserIds, CancellationToken ct = default);
+	Task<Result<ChatMembershipChange>> AddMembersAsync(ClaimsPrincipal actingUser, int legacyChatId, IReadOnlyCollection<int> targetLegacyUserIds, SharedHistorySelection? sharedHistory = null, CancellationToken ct = default);
 
 	/// <summary>
 	/// Removes one participant from a group. Any active participant may remove any other, with the same
 	/// rights boundary as leaving; removing yourself IS leaving and is recorded as such. The removed
-	/// participant keeps a read-only archive of what their stint permitted.
+	/// participant keeps a read-only archive of what their stint permitted - stage 08 freezes that
+	/// archive's chat metadata and its messages' public statuses in the same transaction, so it cannot
+	/// drift afterwards.
 	/// </summary>
 	Task<Result<ChatMembershipChange>> RemoveMemberAsync(ClaimsPrincipal actingUser, int legacyChatId, int targetLegacyUserId, CancellationToken ct = default);
 

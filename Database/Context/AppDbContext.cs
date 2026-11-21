@@ -59,6 +59,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 	public DbSet<SyncAuthorKeyEscrowEntity> SyncAuthorKeyEscrows { get; set; }
 	public DbSet<SyncLegacyContextExclusionEntity> SyncLegacyContextExclusions { get; set; }
 
+	// Shared history and frozen archives (plan 08). Additive on top of plan 02's membership model: the
+	// legacy-stream counterparts of the sequence-space grant/status-snapshot tables (real messages live
+	// in the legacy Messages table until stage 11), plus the private per-device archive-download record.
+	public DbSet<SyncMembershipSharedHistoryWindowEntity> SyncMembershipSharedHistoryWindows { get; set; }
+	public DbSet<SyncMembershipLegacyStatusSnapshotEntity> SyncMembershipLegacyStatusSnapshots { get; set; }
+	public DbSet<SyncArchiveDeviceDeliveryEntity> SyncArchiveDeviceDeliveries { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -105,5 +112,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 		// configuration does; registering it is what makes the runtime model agree with both.
 		modelBuilder.ApplyConfiguration(new SyncAuthorKeyEscrowConfiguration());
 		modelBuilder.ApplyConfiguration(new SyncLegacyContextExclusionConfiguration());
+
+		modelBuilder.ApplyConfiguration(new SyncMembershipSharedHistoryWindowConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncMembershipLegacyStatusSnapshotConfiguration());
+		modelBuilder.ApplyConfiguration(new SyncArchiveDeviceDeliveryConfiguration());
 	}
 }

@@ -4,9 +4,11 @@ Stage 07 only (plan/07-membership.md). Adds `Services/Membership/` - the single 
 chat/membership model and the single shared access check behind every reachable surface - and wires it
 into the entrypoints that exist today: `POST /chat/create-chat`, the new `POST /chat/add-members`,
 `POST /chat/remove-member`, `POST /chat/leave`, `GET /chat/get-chats`, the hub's `send-message`,
-`chat-entered` and its reconnect sweep, and the push fan-out. Shared-history period selection, frozen
-metadata/status snapshots and rejoin unions over the sync message stream are stage 08; key grants are
-stages 11-13.
+`chat-entered` and its reconnect sweep, and the push fan-out. Key grants are stages 11-13.
+
+> Stage 08 extends this module: `POST /chat/add-members` now carries the shared period, `FreezeAsync`
+> captures the archive's metadata/status snapshots, and `ChatAccess.Windows` folds in the shared windows.
+> See `docs/history-archives.md`.
 
 ## Chat identity and kind
 

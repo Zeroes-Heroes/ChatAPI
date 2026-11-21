@@ -123,8 +123,14 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				m.Chat.Users.Select(u => u.Id).Contains(receiverId)
 				&& m.SenderId != receiverId
 				&& !excludedChatIds.Contains(m.ChatId)
+				// Seen counts as received: the legacy table is a log with one row per reached status, and
+				// a recipient can genuinely reach Seen without a Received row - SendMessage's in-chat fast
+				// path writes only Seen, and stage 08 marks newly shared older history Seen at the add.
+				// Writing Received for those here would publish MessageStatusUpdate(Received) to the
+				// author, whose view then regresses Seen -> Delivered and never recovers
+				// (docs/sync-contract-v1.md: "Later device observations never replace it").
 				&& !m.MessageStatusEntities.Any(ms => ms.ReceiverId == receiverId
-					&& ms.Status == MessageStatus.Received))
+					&& (ms.Status == MessageStatus.Received || ms.Status == MessageStatus.Seen)))
 			.ToArrayAsync();
 
 		// Stage 07, deferred delivery: the legacy row keeps every past participant of a chat (that is what
@@ -136,8 +142,16 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		IReadOnlyDictionary<int, ChatAccess> chatAccess = await accessAuthority.GetManyAsync(
 			user, [.. candidateMessages.Select(m => m.ChatId).Distinct()], Context.ConnectionAborted);
 
+		// Stage 08: a chat this caller only holds as a FROZEN archive is excluded from this sweep
+		// altogether. Marking its messages Received here would write a PUBLIC status row - visible to the
+		// authors and counted in the group's proportions - for an archive that must stay exactly as it was
+		// at the removal ("Публичните отметки и unread в замразения чат остават непроменени"). Restoring
+		// an archive on a newly authorized device goes through IChatHistoryService instead, whose
+		// confirmation updates only the private per-device record.
 		MessageEntity[] undeliveredMessages = [.. candidateMessages
-			.Where(m => chatAccess.TryGetValue(m.ChatId, out ChatAccess? access) && access.PermitsMessageAt(m.CreatedAt))];
+			.Where(m => chatAccess.TryGetValue(m.ChatId, out ChatAccess? access)
+				&& access.State == ChatAccessState.Active
+				&& access.PermitsMessageAt(m.CreatedAt))];
 
 		MessageStatusEntity[] messageStatusEntities = undeliveredMessages.Select(m => new MessageStatusEntity(m.Id, receiverId, MessageStatus.Received, now)).ToArray();
 

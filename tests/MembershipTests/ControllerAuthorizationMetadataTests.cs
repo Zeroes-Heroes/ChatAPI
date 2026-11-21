@@ -10,7 +10,8 @@ using Xunit;
 namespace MembershipTests;
 
 /// <summary>
-/// The stage-07 membership endpoints must be reachable ONLY with a currently-trusted app session - the
+/// The stage-07 membership and stage-08 history endpoints must be reachable ONLY with a currently-trusted
+/// app session - the
 /// same real policy composition check stage 06 introduced for its own controllers (ASP.NET Core ANDs
 /// controller- and action-level policies, and this project's app-session and bootstrap requirements
 /// demand mutually exclusive token purposes, so neither a bootstrap token nor an anonymous caller may
@@ -56,6 +57,10 @@ public class ControllerAuthorizationMetadataTests
 		nameof(ChatController.AddMembers),
 		nameof(ChatController.RemoveMember),
 		nameof(ChatController.Leave),
+		// Stage 08: reading permitted history and confirming an archive download are just as much
+		// account-scoped operations as a composition change.
+		nameof(ChatController.GetHistory),
+		nameof(ChatController.ConfirmHistoryStored),
 	];
 
 	[Theory]

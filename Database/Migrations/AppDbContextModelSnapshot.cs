@@ -1058,6 +1058,105 @@ namespace Database.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipLegacyStatusSnapshotEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("LegacyMessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RecipientLegacyUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("CapturedAtChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MembershipId", "LegacyMessageId", "RecipientLegacyUserId");
+
+                    b.HasIndex("LegacyMessageId");
+
+                    b.HasIndex("RecipientLegacyUserId");
+
+                    b.ToTable("SyncMembershipLegacyStatusSnapshots", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncMembershipLegacyStatusSnapshots_CapturedAtChangeSequence_Positive", "\"CapturedAtChangeSequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipSharedHistoryWindowEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("FromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("GrantedAtChangeSequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("GrantedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MembershipId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("SelectedPeriod")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ThroughUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MembershipId", "FromUtc")
+                        .IsUnique();
+
+                    b.ToTable("SyncMembershipSharedHistoryWindows", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SyncMembershipSharedHistoryWindows_GrantedAtChangeSequence_Positive", "\"GrantedAtChangeSequence\" > 0");
+
+                            t.HasCheckConstraint("CK_SyncMembershipSharedHistoryWindows_Range_Valid", "\"ThroughUtc\" >= \"FromUtc\"");
+                        });
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncArchiveDeviceDeliveryEntity", b =>
+                {
+                    b.Property<string>("MembershipId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LocalInstanceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("LegacyMessageId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StoredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("MembershipId", "LocalInstanceId", "LegacyMessageId");
+
+                    b.HasIndex("LegacyMessageId");
+
+                    b.HasIndex("LocalInstanceId");
+
+                    b.ToTable("SyncArchiveDeviceDeliveries", (string)null);
+                });
+
             modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
                 {
                     b.Property<string>("MembershipId")
@@ -2049,6 +2148,78 @@ namespace Database.Migrations
                     b.Navigation("Membership");
                 });
 
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipLegacyStatusSnapshotEntity", b =>
+                {
+                    b.HasOne("Database.Entities.MessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("LegacyMessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipLegacyStatusSnapshots_LegacyMessageId_Messages_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany("LegacyStatusSnapshots")
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipLegacyStatusSnapshots_MembershipId_SyncMemberships_Id");
+
+                    b.HasOne("Database.Entities.UserEntity", "RecipientUser")
+                        .WithMany()
+                        .HasForeignKey("RecipientLegacyUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipLegacyStatusSnapshots_RecipientLegacyUserId_Users_Id");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
+
+                    b.Navigation("RecipientUser");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncMembershipSharedHistoryWindowEntity", b =>
+                {
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany("SharedHistoryWindows")
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncMembershipSharedHistoryWindows_MembershipId_SyncMemberships_Id");
+
+                    b.Navigation("Membership");
+                });
+
+            modelBuilder.Entity("Database.Entities.Sync.SyncArchiveDeviceDeliveryEntity", b =>
+                {
+                    b.HasOne("Database.Entities.MessageEntity", "Message")
+                        .WithMany()
+                        .HasForeignKey("LegacyMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncArchiveDeviceDeliveries_LegacyMessageId_Messages_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncLocalInstanceEntity", "LocalInstance")
+                        .WithMany()
+                        .HasForeignKey("LocalInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncArchiveDeviceDeliveries_LocalInstanceId_SyncLocalInstances_Id");
+
+                    b.HasOne("Database.Entities.Sync.SyncMembershipEntity", "Membership")
+                        .WithMany("ArchiveDeviceDeliveries")
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_SyncArchiveDeviceDeliveries_MembershipId_SyncMemberships_Id");
+
+                    b.Navigation("LocalInstance");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Message");
+                });
+
             modelBuilder.Entity("Database.Entities.Sync.SyncMembershipMessageStatusSnapshotEntity", b =>
                 {
                     b.HasOne("Database.Entities.Sync.SyncAccountEntity", "RecipientAccount")
@@ -2406,9 +2577,15 @@ namespace Database.Migrations
 
             modelBuilder.Entity("Database.Entities.Sync.SyncMembershipEntity", b =>
                 {
+                    b.Navigation("ArchiveDeviceDeliveries");
+
                     b.Navigation("HistoryGrants");
 
+                    b.Navigation("LegacyStatusSnapshots");
+
                     b.Navigation("MetadataSnapshot");
+
+                    b.Navigation("SharedHistoryWindows");
 
                     b.Navigation("Unread");
                 });

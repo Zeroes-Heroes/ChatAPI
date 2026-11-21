@@ -8,6 +8,8 @@ using Database.Entities.Sync;
 using Database.Enums;
 using Database.Enums.Sync;
 using Microsoft.AspNetCore.SignalR;
+using Services.History.Interface;
+using Services.History.Service;
 using Services.Hubs;
 using Services.Membership.Interface;
 using Services.Membership.Service;
@@ -40,8 +42,28 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			new PersonalBlockDirectory(db),
 			new SessionTrustChecker(db, Clock),
 			new AccountContextBoundary(db, new Services.Sessions.Service.SessionConnectionRegistry()),
+			Authority(db),
 			Hub,
 			Clock);
+
+	/// <summary>Stage 08's history/archive reader, over the same real access check the production wiring uses.</summary>
+	public IChatHistoryService History(AppDbContext db) => new ChatHistoryService(db, Authority(db), Clock);
+
+	/// <summary>A legacy message, the only kind that exists today (SyncMessages start in stage 11).</summary>
+	public static async Task<MessageEntity> SendLegacyAsync(AppDbContext db, ChatEntity chat, int senderLegacyUserId, string content, DateTime atUtc)
+	{
+		MessageEntity message = new(content, senderLegacyUserId, chat.Id, atUtc);
+		db.Messages.Add(message);
+		await db.SaveChangesAsync();
+		return message;
+	}
+
+	/// <summary>A public status row exactly as the legacy hub writes it (the table is a log: one row per reached status).</summary>
+	public static async Task MarkLegacyStatusAsync(AppDbContext db, int messageId, int receiverLegacyUserId, MessageStatus status, DateTime atUtc)
+	{
+		db.MessagesStatus.Add(new MessageStatusEntity(messageId, receiverLegacyUserId, status, atUtc));
+		await db.SaveChangesAsync();
+	}
 
 	/// <summary>A legacy user plus its current account context and one trusted device/session, i.e. a caller that passes the real trust check.</summary>
 	public async Task<TestMember> CreateMemberAsync(AppDbContext db)
@@ -76,6 +98,38 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 		await db.SaveChangesAsync();
 
 		return new TestMember(user.Id, account, device, instance, session, Principal(user.Id, account.Id, session.Id, device.Id, instance.Id, device.TrustVersion));
+	}
+
+	/// <summary>
+	/// A SECOND authorized device of an existing account: its own registration, its own SQLite copy
+	/// (LocalInstanceId) and its own session. Stage 08 needs it because restoring an archive is scoped to
+	/// one local instance, not to the person - the public marks already say the person received it.
+	/// </summary>
+	public async Task<TestMember> AddDeviceAsync(AppDbContext db, TestMember owner)
+	{
+		using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+		SyncDeviceRegistrationEntity device = new(
+			$"dev-{Guid.NewGuid():N}", owner.Account.Id, Clock.GetUtcNow().UtcDateTime, "k1",
+			key.ExportSubjectPublicKeyInfo(), isFirstDevice: false, approvedByDeviceRegistrationId: owner.Device.Id)
+		{
+			TrustState = DeviceTrustState.Trusted,
+		};
+		db.SyncDeviceRegistrations.Add(device);
+		await db.SaveChangesAsync();
+
+		SyncLocalInstanceEntity instance = new($"inst-{Guid.NewGuid():N}", device.Id, Clock.GetUtcNow().UtcDateTime);
+		db.SyncLocalInstances.Add(instance);
+		await db.SaveChangesAsync();
+
+		SyncDeviceSessionEntity session = new(
+			$"sess-{Guid.NewGuid():N}", owner.Account.Id, device.Id, instance.Id, Clock.GetUtcNow().UtcDateTime, device.TrustVersion,
+			SHA256.HashData(Encoding.ASCII.GetBytes($"refresh-{Guid.NewGuid():N}")), Clock.GetUtcNow().UtcDateTime.AddDays(30));
+		db.SyncDeviceSessions.Add(session);
+		await db.SaveChangesAsync();
+
+		return new TestMember(
+			owner.LegacyUserId, owner.Account, device, instance, session,
+			Principal(owner.LegacyUserId, owner.Account.Id, session.Id, device.Id, instance.Id, device.TrustVersion));
 	}
 
 	/// <summary>The claims an app-session token carries, exactly as <see cref="SessionTrustChecker"/> reads them.</summary>

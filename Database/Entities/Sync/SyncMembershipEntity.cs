@@ -66,6 +66,16 @@ public class SyncMembershipEntity
 	public virtual SyncAccountEntity? EndedByAccount { get; set; }
 	public virtual SyncAccountEntity? AddedByAccount { get; set; }
 	public virtual ICollection<SyncMembershipHistoryGrantEntity> HistoryGrants { get; set; } = [];
+
+	/// <summary>Stage 08: the older history shared with this stint when it was added, as disjoint legacy-time windows. Empty for "no previous history" and for a founding/projected stint (whose participation window already starts at the beginning of the chat).</summary>
+	public virtual ICollection<SyncMembershipSharedHistoryWindowEntity> SharedHistoryWindows { get; set; } = [];
+
+	/// <summary>Stage 08: the public statuses of this stint's permitted legacy messages, frozen at its removal/leave.</summary>
+	public virtual ICollection<SyncMembershipLegacyStatusSnapshotEntity> LegacyStatusSnapshots { get; set; } = [];
+
+	/// <summary>Stage 08: private per-device progress of downloading this stint's archive. Never part of any public status.</summary>
+	public virtual ICollection<SyncArchiveDeviceDeliveryEntity> ArchiveDeviceDeliveries { get; set; } = [];
+
 	public virtual SyncMembershipMetadataSnapshotEntity? MetadataSnapshot { get; set; }
 	public virtual SyncUnreadStateEntity? Unread { get; set; }
 }

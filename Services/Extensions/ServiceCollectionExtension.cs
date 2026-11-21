@@ -27,6 +27,8 @@ using Services.Presence.Service;
 using Services.Keys;
 using Services.Keys.Interface;
 using Services.Keys.Service;
+using Services.History.Interface;
+using Services.History.Service;
 using Services.Membership.Interface;
 using Services.Membership.Service;
 using Services.Recovery.Interface;
@@ -255,6 +257,10 @@ public static class ServiceCollectionExtension
 			.AddScoped<IPersonalBlockDirectory, PersonalBlockDirectory>()
 			.AddScoped<IChatAccessAuthority, ChatAccessAuthority>()
 			.AddScoped<IChatMembershipService, ChatMembershipService>()
+			// Stage 08 shared history / frozen archives (Services/History). Scoped for the same reason:
+			// it reads through the caller's own AppDbContext and writes only the private per-device
+			// archive record.
+			.AddScoped<IChatHistoryService, ChatHistoryService>()
 			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
 			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
 			// share one timer loop instead of being two near-identical hosted services.

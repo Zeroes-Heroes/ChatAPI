@@ -4,12 +4,15 @@ using System.Security.Claims;
 using Database.Context;
 using Database.Entities;
 using Database.Entities.Sync;
+using Database.Enums;
 using Database.Enums.Sync;
 using Database.Sequencing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Services.Extensions;
 using Services.Hubs;
+// Services.Hubs.Models is deliberately NOT imported: it contains a type named MessageStatusUpdate,
+// which would collide with the LiveEvents.MessageStatusUpdate event name this file imports statically.
 using Services.Membership.Interface;
 using Services.Membership.Models;
 using Services.Sessions;
@@ -43,6 +46,7 @@ public sealed class ChatMembershipService(
 	IPersonalBlockDirectory blocks,
 	ISessionTrustChecker trustChecker,
 	IAccountContextBoundary contextBoundary,
+	IChatAccessAuthority accessAuthority,
 	IHubContext<BaseHub> hubContext,
 	TimeProvider timeProvider) : IChatMembershipService
 {
@@ -87,7 +91,8 @@ public sealed class ChatMembershipService(
 	}
 
 	public Task<Result<ChatMembershipChange>> AddMembersAsync(
-		ClaimsPrincipal actingUser, int legacyChatId, IReadOnlyCollection<int> targetLegacyUserIds, CancellationToken ct = default)
+		ClaimsPrincipal actingUser, int legacyChatId, IReadOnlyCollection<int> targetLegacyUserIds,
+		SharedHistorySelection? sharedHistory = null, CancellationToken ct = default)
 	{
 		// Distinct (a repeated id is one participant) and ascending - the module's lock order for the
 		// per-account rows this add touches, see the type's own doc comment.
@@ -97,7 +102,9 @@ public sealed class ChatMembershipService(
 			return Task.FromResult(Result<ChatMembershipChange>.Failure("No participants were supplied.", HttpStatusCode.BadRequest));
 		}
 
-		return MutateAsync(actingUser, legacyChatId, (context, token) => AddAsync(context, targets, token), ct);
+		SharedHistorySelection selection = sharedHistory ?? SharedHistorySelection.None;
+
+		return MutateAsync(actingUser, legacyChatId, (context, token) => AddAsync(context, targets, selection, token), ct);
 	}
 
 	public Task<Result<ChatMembershipChange>> RemoveMemberAsync(
@@ -227,13 +234,26 @@ public sealed class ChatMembershipService(
 		if (applied.Changed)
 		{
 			await BroadcastAsync(applied.Change, applied.NotifyLegacyUserIds, ct);
+			await BroadcastSharedHistorySeenAsync(applied.Change.ChatId, applied.SharedHistorySeen, ct);
 		}
 
 		return Result<ChatMembershipChange>.Success(applied.Change);
 	}
 
 	/// <summary><paramref name="Changed"/> is false for an idempotent retry that found the change already applied - nothing was written, and nothing is broadcast a second time.</summary>
-	private sealed record MutationOutcome(ChatMembershipChange Change, IReadOnlyList<int> NotifyLegacyUserIds, bool Changed);
+	/// <param name="SharedHistorySeen">Stage 08: the logical Seen marks the committed add produced on already-existing messages, to be reported to their authors - "Тази промяна се отразява в разрешените статуси при останалите участници."</param>
+	private sealed record MutationOutcome(
+		ChatMembershipChange Change,
+		IReadOnlyList<int> NotifyLegacyUserIds,
+		bool Changed,
+		IReadOnlyList<SharedHistorySeenMark> SharedHistorySeen)
+	{
+		public MutationOutcome(ChatMembershipChange change, IReadOnlyList<int> notify, bool changed)
+			: this(change, notify, changed, []) { }
+	}
+
+	/// <summary>One author's messages that a just-added member was logically marked as having Seen, for the post-commit status broadcast.</summary>
+	private sealed record SharedHistorySeenMark(int SenderLegacyUserId, int RecipientLegacyUserId, int[] MessageIds, DateTime AtUtc);
 
 	private async Task<MutationContext> OpenAsync(ClaimsPrincipal actingUser, int legacyChatId, CancellationToken ct)
 	{
@@ -280,7 +300,8 @@ public sealed class ChatMembershipService(
 		return new MutationContext(legacyChat, chat, actorLegacyUserId, actorAccount, actorStint, now);
 	}
 
-	private async Task<MutationOutcome> AddAsync(MutationContext context, int[] targets, CancellationToken ct)
+	private async Task<MutationOutcome> AddAsync(
+		MutationContext context, int[] targets, SharedHistorySelection selection, CancellationToken ct)
 	{
 		RequireGroup(context);
 		RequireActiveActor(context);
@@ -316,6 +337,14 @@ public sealed class ChatMembershipService(
 			throw new ChatMembershipForbiddenException("That participant has blocked you.");
 		}
 
+		// Stage 08: what this add actually shares - the chosen period, resolved from the SERVER clock,
+		// intersected with the history the adder itself may read, under the chat lock this mutation
+		// already holds. Computed once for the whole add: every target of one request gets the same
+		// period, and a concurrent removal of the adder either commits first (RequireActiveActor above
+		// then refuses) or waits for this transaction.
+		IReadOnlyList<SharedWindow> sharedWindows = await ResolveSharedWindowsAsync(context, selection, ct);
+
+		List<SharedHistorySeenMark> seenMarks = [];
 		foreach (int target in targets)
 		{
 			SyncAccountEntity account = await accounts.GetOrCreateActiveAccountAsync(db, target, context.Now, ct);
@@ -339,19 +368,157 @@ public sealed class ChatMembershipService(
 			}
 
 			SyncMembershipEntity stint = NewStint(context.Chat.Id, account.Id, context.Now);
-			// No previous history by default (MESSAGE_SYNC_ANALYSIS.md: "включително без предишна история");
-			// choosing a shared period is stage 08, which will move this bound back instead of inventing it.
+			// The PARTICIPATION window always starts at the add: everything older this stint may read is
+			// expressed as explicit shared windows below, never by moving this bound back, so "no previous
+			// history" and "a shared period with a gap in it" are the same mechanism with different rows.
 			stint.LegacyHistoryFromUtc = context.Now;
 			stint.AddedByAccountId = context.ActorAccount.Id;
 			db.SyncMemberships.Add(stint);
 			db.SyncMembershipHistoryGrants.Add(
 				new SyncMembershipHistoryGrantEntity(stint.Id, await NextMessageSequenceAsync(context.Chat.Id, ct), null));
 
-			await AppendMembershipChangeAsync(context.Chat.Id, stint.Id, SyncMembershipEventKind.Added, context.Now, ct);
+			long changeSequence = await AppendMembershipChangeAsync(context.Chat.Id, stint.Id, SyncMembershipEventKind.Added, context.Now, ct);
+
+			foreach (SharedWindow window in sharedWindows)
+			{
+				db.SyncMembershipSharedHistoryWindows.Add(new SyncMembershipSharedHistoryWindowEntity(
+					stint.Id, window.FromUtc, window.ThroughUtc, selection.Period, changeSequence, context.Now));
+
+				await AddSequenceGrantForWindowAsync(context.Chat.Id, stint.Id, window, ct);
+			}
+
+			// "Споделените стари съобщения се маркират логически Seen за новия участник, без unread и
+			// известия за ново входящо" - inside this same transaction, so a crash cannot leave a member
+			// holding shared history that counts as unread.
+			seenMarks.AddRange(await MarkSharedHistorySeenAsync(context, target, sharedWindows, ct));
+
 			await AppendCatalogAsync(account.Id, context.Chat.Id, stint.Id, context.Now, ct);
 		}
 
-		return await CompleteAsync(context, added: targets, removed: [], left: [], actorUserId: context.ActorLegacyUserId, ct);
+		MutationOutcome outcome = await CompleteAsync(
+			context, added: targets, removed: [], left: [], actorUserId: context.ActorLegacyUserId, ct);
+
+		return outcome with { SharedHistorySeen = seenMarks };
+	}
+
+	/// <summary>One disjoint window of older history this add shares, already clipped to what the adder may read.</summary>
+	private sealed record SharedWindow(DateTime FromUtc, DateTime ThroughUtc);
+
+	/// <summary>
+	/// The chosen period intersected with the adder's own permitted history
+	/// (MESSAGE_SYNC_ANALYSIS.md: "Споделя се пресечната част на избрания период и историята, разрешена
+	/// на добавящия. Недостъпните за него междини остават недостъпни"). The adder's windows are read
+	/// through the one shared access check, so a period can never reach into something the adder itself
+	/// holds no window for - including the gap of its own rejoin.
+	/// </summary>
+	private async Task<IReadOnlyList<SharedWindow>> ResolveSharedWindowsAsync(
+		MutationContext context, SharedHistorySelection selection, CancellationToken ct)
+	{
+		if (selection.ResolveFromUtc(context.Now) is not DateTime fromUtc)
+		{
+			return [];
+		}
+
+		ChatAccess adder = await accessAuthority.GetForAccountAsync(context.ActorAccount.Id, LegacyChatIdOf(context), ct);
+
+		List<SharedWindow> clipped = [];
+		foreach (LegacyHistoryWindow window in adder.Windows)
+		{
+			(DateTime From, DateTime Through)? clip = window.ClipTo(fromUtc, context.Now);
+			if (clip is not null)
+			{
+				clipped.Add(new SharedWindow(clip.Value.From, clip.Value.Through));
+			}
+		}
+
+		// The adder's own windows can overlap (a rejoin whose newly shared period reaches back into its
+		// old archive), and overlapping rows would both violate the unique (MembershipId, FromUtc) index
+		// and describe the same instant twice. Merged into the disjoint set they actually denote; only a
+		// real gap - an instant covered by NO window of the adder - survives as a gap.
+		clipped.Sort((left, right) => left.FromUtc.CompareTo(right.FromUtc));
+
+		List<SharedWindow> merged = [];
+		foreach (SharedWindow window in clipped)
+		{
+			if (merged.Count > 0 && window.FromUtc <= merged[^1].ThroughUtc)
+			{
+				if (window.ThroughUtc > merged[^1].ThroughUtc)
+				{
+					merged[^1] = merged[^1] with { ThroughUtc = window.ThroughUtc };
+				}
+
+				continue;
+			}
+
+			merged.Add(window);
+		}
+
+		return merged;
+	}
+
+	/// <summary>
+	/// The sequence-space counterpart of a shared window, written only when the window actually contains
+	/// committed <c>SyncMessages</c>. Today it never does - every real message still lives in the legacy
+	/// <c>Messages</c> table - but writing it from the same place as the legacy window is what keeps the
+	/// two representations from diverging the moment stage 11 starts committing sync messages; inventing
+	/// a sequence range for a window with no messages in it would instead durably over-grant.
+	/// </summary>
+	private async Task AddSequenceGrantForWindowAsync(string chatId, string membershipId, SharedWindow window, CancellationToken ct)
+	{
+		var bounds = await db.SyncMessages.AsNoTracking()
+			.Where(m => m.ChatId == chatId && m.CreatedAtUtc >= window.FromUtc && m.CreatedAtUtc <= window.ThroughUtc)
+			.GroupBy(m => 1)
+			.Select(g => new { From = g.Min(m => m.MessageSequence), Through = g.Max(m => m.MessageSequence) })
+			.FirstOrDefaultAsync(ct);
+		if (bounds is null)
+		{
+			return;
+		}
+
+		db.SyncMembershipHistoryGrants.Add(new SyncMembershipHistoryGrantEntity(membershipId, bounds.From, bounds.Through));
+	}
+
+	/// <summary>
+	/// Marks the shared older messages logically Seen for the added member and reports, per author, what
+	/// was marked. Messages the member itself sent are skipped (it is not its own recipient), and a Seen
+	/// row that already exists - from an earlier stint whose archive overlaps this period - is left
+	/// exactly as it is, which is what keeps "Старият архив ... запазва статусите си" true on a rejoin.
+	/// </summary>
+	private async Task<IReadOnlyList<SharedHistorySeenMark>> MarkSharedHistorySeenAsync(
+		MutationContext context, int targetLegacyUserId, IReadOnlyList<SharedWindow> windows, CancellationToken ct)
+	{
+		if (windows.Count == 0)
+		{
+			return [];
+		}
+
+		DateTime earliest = windows[0].FromUtc;
+		DateTime latest = windows[^1].ThroughUtc;
+
+		var candidates = await db.Messages.AsNoTracking()
+			.Where(m => m.ChatId == context.LegacyChat.Id
+				&& m.SenderId != targetLegacyUserId
+				&& m.CreatedAt >= earliest
+				&& m.CreatedAt <= latest
+				&& !m.MessageStatusEntities.Any(s => s.ReceiverId == targetLegacyUserId && s.Status == MessageStatus.Seen))
+			.Select(m => new { m.Id, m.SenderId, m.CreatedAt })
+			.ToListAsync(ct);
+
+		List<SharedHistorySeenMark> marks = [];
+		foreach (var bySender in candidates
+			.Where(m => windows.Any(w => m.CreatedAt >= w.FromUtc && m.CreatedAt <= w.ThroughUtc))
+			.GroupBy(m => m.SenderId))
+		{
+			int[] messageIds = [.. bySender.Select(m => m.Id)];
+			foreach (int messageId in messageIds)
+			{
+				db.MessagesStatus.Add(new MessageStatusEntity(messageId, targetLegacyUserId, MessageStatus.Seen, context.Now));
+			}
+
+			marks.Add(new SharedHistorySeenMark(bySender.Key, targetLegacyUserId, messageIds, context.Now));
+		}
+
+		return marks;
 	}
 
 	private async Task<MutationOutcome> RemoveAsync(MutationContext context, int targetLegacyUserId, CancellationToken ct)
@@ -432,7 +599,87 @@ public sealed class ChatMembershipService(
 			}
 		}
 
+		// Stage 08: the archive itself - the chat as it looked and the public statuses as they stood at
+		// this exact moment - captured in the SAME transaction, under the SAME chat lock. Anything
+		// committed after this point belongs to the chat, not to this archive; nothing committed before
+		// it can be missed.
+		await CaptureArchiveAsync(context, stint, changeSequence, ct);
+
 		await AppendCatalogAsync(stint.AccountId, context.Chat.Id, stint.Id, context.Now, ct);
+	}
+
+	/// <summary>
+	/// Freezes what a just-ended stint keeps (plan/08-history-archives.md: "Премахване и напускане
+	/// замразяват разрешените съобщения, статуси и метаданни"): the chat's metadata and composition as of
+	/// the exit, plus a copy of the public status of every permitted message. The copies exist because
+	/// the live rows keep changing for the chat's still-active members - without them the archive would
+	/// drift after the fact, and "Последващи съобщения, статуси, имена и промени в състава остават извън
+	/// достъпа му" would be false.
+	/// </summary>
+	private async Task CaptureArchiveAsync(
+		MutationContext context, SyncMembershipEntity stint, long changeSequence, CancellationToken ct)
+	{
+		db.SyncMembershipMetadataSnapshots.Add(new SyncMembershipMetadataSnapshotEntity(
+			stint.Id, context.Chat.Name, context.Chat.Kind, changeSequence, context.Now));
+
+		// The composition this archive shows: everyone still active at the exit, plus the departing member
+		// itself, recorded as no longer taking part. Exactly the set DescribeAsync derives for a frozen
+		// stint today, now durable instead of re-derived from rows that keep changing.
+		List<SyncMembershipEntity> remaining = await db.SyncMemberships
+			.Where(m => m.ChatId == context.Chat.Id
+				&& m.Id != stint.Id
+				&& m.State == SyncMembershipState.Active
+				&& m.Account.EndedAtUtc == null)
+			.ToListAsync(ct);
+
+		db.SyncMembershipMetadataSnapshotMembers.Add(new SyncMembershipMetadataSnapshotMemberEntity(
+			stint.Id, context.Chat.Id, stint.AccountId, stint.Id, SyncMembershipState.Frozen));
+		foreach (SyncMembershipEntity other in remaining.Where(m => !string.Equals(m.AccountId, stint.AccountId, StringComparison.Ordinal)))
+		{
+			db.SyncMembershipMetadataSnapshotMembers.Add(new SyncMembershipMetadataSnapshotMemberEntity(
+				stint.Id, context.Chat.Id, other.AccountId, other.Id, SyncMembershipState.Active));
+		}
+
+		// The messages this stint was permitted: its participation window plus every window of older
+		// history that was shared with it. Bounded by the chat's own history - a chat with no messages
+		// produces no rows at all.
+		List<SharedWindow> windows = [.. (await db.SyncMembershipSharedHistoryWindows.AsNoTracking()
+			.Where(w => w.MembershipId == stint.Id)
+			.ToListAsync(ct))
+			.Select(w => new SharedWindow(w.FromUtc, w.ThroughUtc))];
+		windows.Add(new SharedWindow(stint.LegacyHistoryFromUtc ?? DateTime.MinValue, context.Now));
+
+		List<int> permitted = [.. (await db.Messages.AsNoTracking()
+			.Where(m => m.ChatId == context.LegacyChat.Id && m.CreatedAt <= context.Now)
+			.Select(m => new { m.Id, m.CreatedAt })
+			.ToListAsync(ct))
+			.Where(m => windows.Any(w => m.CreatedAt >= w.FromUtc && m.CreatedAt <= w.ThroughUtc))
+			.Select(m => m.Id)];
+		if (permitted.Count == 0)
+		{
+			return;
+		}
+
+		// Every recipient's status, not only the departing member's own: the archive has to keep showing
+		// the group's Received/Seen proportions and the author's individual view
+		// (MESSAGE_SYNC_ANALYSIS.md: "Премахнатият участник запазва разрешените съобщения, статуси и
+		// метаданни в състоянието им към премахването").
+		List<MessageStatusEntity> live = await db.MessagesStatus.AsNoTracking()
+			.Where(s => permitted.Contains(s.MessageId))
+			.ToListAsync(ct);
+
+		foreach (IGrouping<(int MessageId, int ReceiverId), MessageStatusEntity> pair in live.GroupBy(s => (s.MessageId, s.ReceiverId)))
+		{
+			SyncMembershipLegacyStatusSnapshotEntity snapshot = new(stint.Id, pair.Key.MessageId, pair.Key.ReceiverId, changeSequence)
+			{
+				// The legacy table is a log with one row per status, so the two kinds are merged into this
+				// row's two timestamps; a missing one means that status was never reached by the exit.
+				ReceivedAtUtc = pair.Where(s => s.Status == MessageStatus.Received).Select(s => (DateTime?)s.Timestamp).FirstOrDefault(),
+				SeenAtUtc = pair.Where(s => s.Status == MessageStatus.Seen).Select(s => (DateTime?)s.Timestamp).FirstOrDefault(),
+			};
+
+			db.SyncMembershipLegacyStatusSnapshots.Add(snapshot);
+		}
 	}
 
 	private async Task<MutationOutcome> CompleteAsync(
@@ -515,19 +762,39 @@ public sealed class ChatMembershipService(
 		}
 	}
 
-	private async Task SendToLegacyUsersAsync(int[] legacyUserIds, int legacyChatId, ChatMembershipChange payload, CancellationToken ct)
+	private Task SendToLegacyUsersAsync(int[] legacyUserIds, int legacyChatId, ChatMembershipChange payload, CancellationToken ct) =>
+		SendToLegacyUsersAsync(legacyUserIds, legacyChatId, ChatMembershipChanged, payload, ct);
+
+	private async Task SendToLegacyUsersAsync<T>(int[] legacyUserIds, int legacyChatId, string eventName, T payload, CancellationToken ct)
 	{
 		// Same fresh-start recipient isolation as every other live send (stage 06): SignalR addresses
 		// users by legacy id, which cannot tell a phone's superseded context from its current one.
 		LegacyRecipients delivery = await contextBoundary.ResolveLegacyRecipientsAsync(legacyUserIds, legacyChatId, ct);
 		if (delivery.UserIds.Count > 0)
 		{
-			await hubContext.Clients.GetUsersByIds([.. delivery.UserIds]).SendAsync(ChatMembershipChanged, payload, ct);
+			await hubContext.Clients.GetUsersByIds([.. delivery.UserIds]).SendAsync(eventName, payload, ct);
 		}
 
 		if (delivery.ConnectionIds.Count > 0)
 		{
-			await hubContext.Clients.Clients(delivery.ConnectionIds).SendAsync(ChatMembershipChanged, payload, ct);
+			await hubContext.Clients.Clients(delivery.ConnectionIds).SendAsync(eventName, payload, ct);
+		}
+	}
+
+	/// <summary>
+	/// Tells each author that the just-added member counts as having Seen their shared older messages
+	/// (MESSAGE_SYNC_ANALYSIS.md: "Тази промяна се отразява в разрешените статуси при останалите
+	/// участници"). Strictly after the commit, exactly like every other broadcast here, so a rolled-back
+	/// add publishes nothing.
+	/// </summary>
+	private async Task BroadcastSharedHistorySeenAsync(int legacyChatId, IReadOnlyList<SharedHistorySeenMark> marks, CancellationToken ct)
+	{
+		foreach (SharedHistorySeenMark mark in marks)
+		{
+			Hubs.Models.MessageStatusUpdateEvent statusUpdate = new(
+				legacyChatId, mark.RecipientLegacyUserId, MessageStatus.Seen, mark.AtUtc, mark.MessageIds);
+
+			await SendToLegacyUsersAsync([mark.SenderLegacyUserId], legacyChatId, MessageStatusUpdate, statusUpdate, ct);
 		}
 	}
 
