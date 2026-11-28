@@ -105,6 +105,15 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 				await Groups.AddToGroupAsync(Context.ConnectionId, DeliveryGroups.ForDevice(deviceRegistrationId));
 			}
 
+			// The narrower of the two v1 addresses, for the changes that are this SQLite copy's alone - its
+			// own device progress. Joined from this connection's OWN claims for the same reason as the
+			// registration group above, so no connection can ever subscribe to another copy's progress.
+			string? localInstanceId = user.FindFirstValue(SessionClaimTypes.LocalInstanceId);
+			if (localInstanceId is not null)
+			{
+				await Groups.AddToGroupAsync(Context.ConnectionId, DeliveryGroups.ForInstance(localInstanceId));
+			}
+
 			// Registers this exact connection so a later revocation can actually abort it even while
 			// idle (ISessionConnectionRegistry), not merely notify it - see that interface's own doc
 			// comment for the same-replica/cross-replica split.
@@ -606,6 +615,72 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 	}
 
 	/// <summary>
+	/// The v1 receipt surface: ONE device's report about ONE message, as a single JSON-string
+	/// <c>ReceiptRequest</c> answered with a JSON-string <c>ReceiptResult</c> or <c>SyncFailure</c>.
+	/// Deliberately SINGULAR on the wire - <c>SyncProtocol.MaxReceiptBatchItems</c> bounds a batched
+	/// receipt surface, and this invocation is not one, so the only limit that applies here is
+	/// <see cref="SyncProtocol.MaxHubMessageBytes"/>, enforced below on the real wire bytes before
+	/// anything is parsed.
+	///
+	/// Every rule (what a scope authorizes, idempotence, a frozen archive updating private progress only,
+	/// a terminal NotApplicable, the refusal of Seen) lives in <see cref="IMessageStatusService"/>. This
+	/// method enforces the transport limit, hands the request over and answers strictly AFTER the commit -
+	/// so a device that receives an answer knows the state it describes is durable.
+	/// </summary>
+	[HubMethodName("sync-receipt")]
+	public async Task<string?> SyncReceipt(string requestJson)
+	{
+		if (System.Text.Encoding.UTF8.GetByteCount(requestJson ?? string.Empty) > SyncProtocol.MaxHubMessageBytes)
+		{
+			// "Enforce actual complete wire sizes at send/receive" - refused before anything is parsed.
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		if (!TryReadSyncRequest(requestJson, out ReceiptRequest? request))
+		{
+			return WriteSync(new SyncFailure(SyncErrorCode.InvalidRequest, null));
+		}
+
+		ClaimsPrincipal? user = Context.User;
+		if (user is null)
+		{
+			return null;
+		}
+
+		// Disposed with this invocation: the status write owns a transaction on this scope's own
+		// DbContext, so the scope must not outlive the answer it produced.
+		await using AsyncServiceScope scope = serviceScopeFactory.CreateAsyncScope();
+		IServiceProvider serviceProvider = scope.ServiceProvider;
+
+		Services.Sync.Models.SyncResult<ReceiptAcceptance> result = await serviceProvider
+			.GetRequiredService<IMessageStatusService>()
+			.AcceptSyncReceiptAsync(user, request!, Context.ConnectionAborted);
+
+		if (result.Failure is SyncFailure failure)
+		{
+			if (failure.Code == SyncErrorCode.SessionExpired)
+			{
+				// The caller stopped being trusted while this invocation ran - same treatment as every
+				// other mutating hub method. The failure is transient by contract, so the device keeps the
+				// receipt queued.
+				Context.Abort();
+			}
+
+			return WriteSync(failure);
+		}
+
+		if (result.Value!.QueuedForDelivery)
+		{
+			// This receipt queued an outbox row, so wake this replica's publisher instead of letting the
+			// status change wait for the next poll. Latency only - the committed row is what makes it
+			// deliverable, from any replica, after any crash.
+			serviceProvider.GetRequiredService<IOutboxPublishSignal>().Notify();
+		}
+
+		return WriteSync(result.Value.Result);
+	}
+
+	/// <summary>
 	/// Stage 13 (plan/13-history-api.md): the handshake that fixes this connection's sync, the
 	/// enumeration of what it fixed, the position exchanges and the readiness they produce. Same v1 JSON
 	/// string encoding as the stage-11 methods above.
@@ -637,6 +712,14 @@ public class BaseHub(IServiceScopeFactory serviceScopeFactory) : Hub
 		}
 
 		await Groups.AddToGroupAsync(Context.ConnectionId, DeliveryGroups.ForDevice(deviceRegistrationId));
+
+		// Both v1 addresses are re-asserted here (the joins are idempotent): a boundary set must never be
+		// fixed for a connection that live delivery could not reach, and private device progress travels
+		// to the instance group alone.
+		if (user.FindFirstValue(SessionClaimTypes.LocalInstanceId) is string handshakeInstanceId)
+		{
+			await Groups.AddToGroupAsync(Context.ConnectionId, DeliveryGroups.ForInstance(handshakeInstanceId));
+		}
 
 		IServiceScope scope = serviceScopeFactory.CreateAsyncScope();
 		Services.Sync.Models.SyncResult<SyncHandshakeResponse> result = await scope.ServiceProvider

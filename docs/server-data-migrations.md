@@ -145,3 +145,41 @@ layer gets them wrong:
   so this stage deliberately does not add a column that would claim to provide one; a later stage
   that introduces a live-view snapshot concept should define and persist that identity explicitly at
   that time, rather than this stage inventing a placeholder for it now.
+
+
+## Receipt outbox discriminator (27 November 2026)
+
+`20261127120000_AddReceiptOutboxDiscriminator` adds `SyncOutbox.ChangeKind`
+(non-null integer, default `1` = `Message`) and nullable `SecondaryId` (up to 100
+characters). Existing outbox rows and older message producers retain message-delivery
+semantics. Receipt producers persist the status kind and recipient account/local-instance
+reference in the same transaction as the status change. A delayed delivery therefore does
+not depend on a chat-journal row that retention may already have removed.
+
+`SecondaryId` holds exactly one id - the subject account context for a `RecipientState`
+row, the reporting local instance for a `DeviceState` row - because one reference identifies
+the row a pointer points at. The value is always copied from a row the server already
+resolved, and every persisted id column is `varchar(100)` like this one, so a single id
+cannot be truncated; a pair is what would not fit. The owning device registration is read
+back from `SyncMessageDeviceStates`, not stored here a second time.
+
+The required deployment order is:
+
+1. apply this additive migration;
+2. deploy the new outbox consumer (`LiveDeliveryService`, which reads `ChangeKind` after
+   re-reading the row by `OutboxId`) to **every** replica;
+3. only then set `Delivery__PublishStatusChanges=true`.
+
+Step 3 is a real gate, not a formality: `DeliveryOptions.PublishStatusChanges` defaults to
+false, and it is the only guard there is. A mixed-version fleet is **not** safe without it -
+an old consumer treats every claimed row as a message delivery and would re-ship the
+message body and its content key under a new `EventId`, even though the broker payload
+itself remains compatible. With the gate off, receipts are still accepted and their state,
+journal entry and answer still commit; only the live hop is skipped, and the HTTP delta
+(which reads the journal, not the outbox) still carries the change to every device.
+
+Do not roll back these columns while status tasks remain: that would erase their delivery
+meaning. Turn the gate off first and let the queue drain.
+
+The migration and model changes were reviewed as source only; no migration, build or test
+was executed for this part.

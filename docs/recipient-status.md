@@ -21,7 +21,12 @@ Stored ciphertext never produces a public mark ("Записването само
 `Received` requires a completed durable write — and, from stage 11, an available key and a successful
 verify/decrypt, which is why the receipt is a device assertion rather than something the server infers.
 The logical rows are keyed by **MembershipId**, so a rejoin starts a clean logical state while the old
-stint's rows stand as the archive's own value.
+stint's rows stand as the archive's own value. One person can therefore hold several rows for one
+message. What a surface SHOWS is one state per person all the same: the legacy reader takes the furthest
+state that person ever reached (`DescribeAsync`), and the sequence-space reader folds the rows through
+`PublicRecipientState` (earliest Received, first Seen with its reason, summed version — see
+`docs/sync-receipts.md`). Neither picks a row arbitrarily, because a status must not go backwards
+because a newer stint has not repeated an older mark.
 
 ## What a device reports
 
@@ -184,8 +189,10 @@ nothing is lost by it going with the message.
 4. **Sequence-space rows.** *Done in part by stage 11*: accepting a v1 message writes
    `SyncMessageRecipientStates` (the sender's `OwnSend` marks), the `SyncUnreadStates` sequence
    pointers, and `SyncChatChanges` entries of kind `Message`/`Unread`/`RecipientState` —
-   see `docs/message-acceptance.md`. `SyncMessageDeviceStates` and the journalling of *legacy* status
-   changes are still unwritten; the v1 receipt surface that fills them arrives with delivery (stage 12).
+   see `docs/message-acceptance.md`. *Completed for `CiphertextStored`/`Received` by the v1 receipt
+   surface* — `BaseHub.sync-receipt` writes `SyncMessageDeviceStates` and the v1
+   `SyncMessageRecipientStates.ReceivedAtUtc`, journals and delivers both, and refuses `Seen`; see
+   `docs/sync-receipts.md`. The journalling of *legacy* status changes is still unwritten.
 5. **Operation idempotence.** *Done by stage 11*: the `OwnSend` boundary of a v1 send is the accepted
    message's own `MessageSequence`, which is also what the result returns as `OwnSendThroughSequence`,
    so a retry that re-answers the original result necessarily re-answers the original boundary. The

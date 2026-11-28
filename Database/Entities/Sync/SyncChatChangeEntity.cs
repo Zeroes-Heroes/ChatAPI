@@ -7,11 +7,13 @@ namespace Database.Entities.Sync;
 /// by SyncSequenceAllocator from the same counter row as MessageSequence, so a reader walking this
 /// table in sequence order never observes a position whose writing transaction has not committed.
 /// A generic pointer log by design: ReferenceId/SecondaryId point at the detail row for Kind
-/// (MessageId; MessageId+RecipientAccountId for RecipientState; MessageId+"device:instance" for
-/// DeviceState; MembershipId for Unread/Membership/MembershipEvent). This journal is a liveness/
-/// cursor mechanism and may be pruned once consumers are known to be caught up; the frozen-archive
-/// snapshot tables (SyncMembershipMetadataSnapshot*, SyncMembershipMessageStatusSnapshot) are the
-/// durable record and do not depend on this table surviving.
+/// (MessageId; MessageId+RecipientAccountId for RecipientState; MessageId+LocalInstanceId for
+/// DeviceState - ONE id, because one reference identifies the row that changed and the owning
+/// registration is on the device-state row itself; MembershipId for Unread/Membership/MembershipEvent).
+/// This journal is a liveness/cursor mechanism and may be pruned once consumers are known to be caught
+/// up; the frozen-archive snapshot tables (SyncMembershipMetadataSnapshot*,
+/// SyncMembershipMessageStatusSnapshot) are the durable record and do not depend on this table
+/// surviving - and neither does delivery, which keeps its own kind/reference on SyncOutbox.
 /// </summary>
 public class SyncChatChangeEntity
 {

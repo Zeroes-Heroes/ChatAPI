@@ -801,16 +801,21 @@ public sealed class ChatMembershipService(
 
 			foreach (string recipient in recipients.Order(StringComparer.Ordinal))
 			{
-				SyncMessageRecipientStateEntity? state = live.FirstOrDefault(s =>
-					string.Equals(s.MessageId, message.Id, StringComparison.Ordinal)
-					&& string.Equals(s.AccountId, recipient, StringComparison.Ordinal));
+				// The SAME fold the live projection answers with, so an archive captures the state the chat
+				// was actually showing at the freeze. A rejoined person holds one row per stint, and the
+				// earliest proof is the public fact: picking a row arbitrarily could freeze a LATER time, or
+				// none at all, into a record that is then immutable forever.
+				PublicRecipientState state = PublicRecipientState.Fold(live
+					.Where(s => string.Equals(s.MessageId, message.Id, StringComparison.Ordinal)
+						&& string.Equals(s.AccountId, recipient, StringComparison.Ordinal))
+					.Select(s => new PublicRecipientState(s.Version, s.ReceivedAtUtc, s.SeenAtUtc, s.SeenReason)));
 
 				db.SyncMembershipMessageStatusSnapshots.Add(
 					new SyncMembershipMessageStatusSnapshotEntity(stint.Id, context.Chat.Id, message.Id, recipient)
 					{
-						ReceivedAtUtc = state?.ReceivedAtUtc,
-						SeenAtUtc = state?.SeenAtUtc,
-						SeenReason = state?.SeenReason,
+						ReceivedAtUtc = state.ReceivedAtUtc,
+						SeenAtUtc = state.SeenAtUtc,
+						SeenReason = state.SeenReason,
 					});
 			}
 		}

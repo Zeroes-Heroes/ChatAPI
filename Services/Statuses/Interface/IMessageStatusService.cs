@@ -33,10 +33,35 @@ namespace Services.Statuses.Interface;
 /// <c>MessagesStatus</c> log is kept as a projection for the surfaces that still read it. Stage 11 adds
 /// the first message in the SEQUENCE space (<c>SyncMessages</c>), whose unread and OwnSend marks live on
 /// <c>SyncMessageRecipientStates</c> / <c>SyncUnreadStates</c>' sequence pointers; receipts over v1
-/// messages (the device-state half of that space) arrive with the v1 receipt surface in a later stage.
+/// messages (the device-state half of that space) are <see cref="AcceptSyncReceiptAsync"/> below.
+///
+/// A person's PUBLIC mark is stored per stint, so one person can hold more than one row for one message
+/// after a rejoin. <see cref="Services.Statuses.Models.PublicRecipientState"/> is the one fold that
+/// turns those rows into the single fact every reader shows.
 /// </summary>
 public interface IMessageStatusService
 {
+	/// <summary>
+	/// ONE authenticated v1 receipt about ONE message in the SEQUENCE space, singular on the wire
+	/// (<c>sync-receipt</c> takes one <c>ReceiptRequest</c>, not a batch).
+	///
+	/// Only <see cref="Sync.Contracts.ReceiptKind.CiphertextStored"/> and
+	/// <see cref="Sync.Contracts.ReceiptKind.Received"/> are accepted; Seen is refused with
+	/// <see cref="Sync.Contracts.SyncErrorCode.InvalidRequest"/> because fixing a logical Seen time,
+	/// reason and unread decrement needs the clock rules and the client-reported-time column that belong
+	/// to the later parts - a half-supported Seen would durably record a time they could not correct.
+	///
+	/// The scope's membership is the NAMED stint and is authorized against that stint's own message
+	/// sequence grants, so a frozen archive is a legitimate scope (it updates private device progress
+	/// only) and a rejoin's overlapping period is unambiguous. A permanently irrelevant receipt - no
+	/// readable chat, no such stint of this account, no such message, or a message outside the named
+	/// stint's grants - answers <see cref="Sync.Contracts.ReceiptDisposition.NotApplicable"/>, which is
+	/// terminal. An authorization or infrastructure failure answers a
+	/// <see cref="Sync.Contracts.SyncFailure"/> instead, so the device keeps the receipt queued.
+	/// </summary>
+	Task<Sync.Models.SyncResult<ReceiptAcceptance>> AcceptSyncReceiptAsync(
+		ClaimsPrincipal caller, Sync.Contracts.ReceiptRequest request, CancellationToken ct = default);
+
 	/// <summary>
 	/// Accepts one bounded batch of this device's receipts for one chat. Idempotent per
 	/// (message, device) and per (message, person): a retry after a lost response answers

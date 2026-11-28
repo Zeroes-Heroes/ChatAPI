@@ -2027,6 +2027,11 @@ namespace Database.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ChangeKind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<long>("ChangeSequence")
                         .HasColumnType("bigint");
 
@@ -2058,6 +2063,10 @@ namespace Database.Migrations
 
                     b.Property<DateTime?>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SecondaryId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");

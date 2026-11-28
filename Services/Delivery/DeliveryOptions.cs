@@ -45,5 +45,19 @@ public sealed class DeliveryOptions
 	/// <summary>Unacknowledged broker messages one consumer may hold at a time.</summary>
 	public ushort PrefetchCount { get; set; } = 20;
 
+	/// <summary>
+	/// Whether a committed v1 STATUS change (a receipt's device/recipient state) also queues an outbox row
+	/// for live delivery. Default false, and deliberately so: an outbox row carries a
+	/// <c>ChangeKind</c> column that only a consumer deployed with this change reads, and an older
+	/// consumer treats every claimed row as a full message delivery - it would re-ship the message body
+	/// and its content key under a new EventId. Keep it false until every replica runs the new consumer,
+	/// then turn it on (<c>Delivery__PublishStatusChanges=true</c>).
+	///
+	/// With it off nothing is lost and nothing is unsafe: the status change, its journal entry and the
+	/// receipt's answer all still commit, and every device still receives the change through the HTTP
+	/// delta, which reads the journal rather than the outbox. Only the live hop waits.
+	/// </summary>
+	public bool PublishStatusChanges { get; set; }
+
 	public bool IsConfigured => !string.IsNullOrWhiteSpace(ConnectionUri);
 }

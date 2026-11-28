@@ -494,6 +494,17 @@ public sealed class SyncPageService(
 
 			case SyncChangeKind.DeviceState:
 			{
+				// The journal entry names the SQLite copy that reported it (SecondaryId), and the ONLY
+				// surface it means anything to is that copy. Without this filter another local instance of
+				// the same account would be handed a change describing ITS OWN row at a position where a
+				// different copy's row moved - not a leak (it is the caller's own data, and the EventId is
+				// derived from the caller's own version, so it dedupes) but a spurious change that says
+				// something happened to a row that did not change.
+				if (!string.Equals(row.SecondaryId, context.Caller!.LocalInstanceId, StringComparison.Ordinal))
+				{
+					return null;
+				}
+
 				SyncMessageEntity? message = await PermittedMessageAsync(scope, row.ReferenceId, ct);
 				if (message is null)
 				{

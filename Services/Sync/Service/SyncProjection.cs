@@ -10,6 +10,7 @@ using Services.Keys;
 using Services.Keys.Interface;
 using Services.Keys.Models;
 using Services.Sessions;
+using Services.Statuses.Models;
 using Services.Sync.Contracts;
 using Services.Sync.Models;
 using static Services.Sync.Service.SyncWire;
@@ -94,7 +95,7 @@ public sealed class SyncProjection(
 			: EmptyLookup<MessageRecipientState>();
 
 		ILookup<string, MessageDeviceState> deviceStates = includeStatuses
-			? await DeviceStatesAsync(caller, ids, ct)
+			? await DeviceStatesAsync(caller.Device, ids, ct)
 			: EmptyLookup<MessageDeviceState>();
 
 		Dictionary<string, byte[]> spkiCache = new(StringComparer.Ordinal);
@@ -194,6 +195,12 @@ public sealed class SyncProjection(
 	/// Per-person logical statuses: today's rows for an active scope, and the stint's own frozen copies
 	/// for an archive - "Публичните отметки ... в замразения чат остават непроменени", so an archive's
 	/// view cannot drift with the chat's later life.
+	///
+	/// Exactly ONE record per (message, person) either way. The stored rows are per STINT, and a rejoined
+	/// person legitimately holds more than one of them for the same message, so the live branch folds them
+	/// through <see cref="PublicRecipientState"/> - the same fold the frozen capture uses. The frozen
+	/// branch needs no fold: a snapshot is keyed by (membership, message, recipient) and the scope names
+	/// one membership.
 	/// </summary>
 	private async Task<ILookup<string, MessageRecipientState>> RecipientStatesAsync(
 		SyncScopeContext scope, string[] messageIds, CancellationToken ct)
@@ -222,18 +229,31 @@ public sealed class SyncProjection(
 			.Select(s => new { s.MessageId, s.AccountId, s.Version, s.ReceivedAtUtc, s.SeenAtUtc, s.SeenReason })
 			.ToListAsync(ct);
 
-		return live.ToLookup(
-			s => s.MessageId,
-			s => new MessageRecipientState(
-				s.MessageId,
-				s.AccountId,
-				Seq(s.Version),
-				s.ReceivedAtUtc is DateTime received ? RfcTimestamp.Format(received) : null,
-				Seen(s.SeenAtUtc, s.SeenReason)),
-			StringComparer.Ordinal);
+		// One canonical state per (message, person), never one per stint row: a public mark is one fact
+		// about one person, and emitting the rows of a rejoined person separately would let a surface
+		// show the same person twice - with the second record contradicting the first.
+		return live
+			.GroupBy(s => (s.MessageId, s.AccountId))
+			.Select(rows =>
+			{
+				PublicRecipientState state = PublicRecipientState.Fold(rows.Select(
+					r => new PublicRecipientState(r.Version, r.ReceivedAtUtc, r.SeenAtUtc, r.SeenReason)));
+
+				return new MessageRecipientState(
+					rows.Key.MessageId,
+					rows.Key.AccountId,
+					Seq(state.Version),
+					state.ReceivedAtUtc is DateTime received ? RfcTimestamp.Format(received) : null,
+					Seen(state.SeenAtUtc, state.SeenReason));
+			})
+			.ToLookup(s => s.MessageId, StringComparer.Ordinal);
 	}
 
-	/// <summary>One recipient's state for one message, resolved the same way as a whole page's: today's row, or the archive's frozen copy.</summary>
+	/// <summary>
+	/// One recipient's state for one message, resolved the same way as a whole page's: today's folded
+	/// state, or the archive's frozen copy. The pick below is unambiguous rather than arbitrary -
+	/// <see cref="RecipientStatesAsync"/> answers at most one record per person per message.
+	/// </summary>
 	public async Task<MessageRecipientState?> RecipientStateAsync(
 		SyncScopeContext scope, string messageId, string recipientAccountId, CancellationToken ct)
 	{
@@ -243,9 +263,17 @@ public sealed class SyncProjection(
 	}
 
 	/// <summary>This device's own progress for one message, or null when it has reported nothing about it.</summary>
-	public async Task<MessageDeviceState?> OwnDeviceStateAsync(SyncCallerIdentity caller, string messageId, CancellationToken ct)
+	public Task<MessageDeviceState?> OwnDeviceStateAsync(SyncCallerIdentity caller, string messageId, CancellationToken ct) =>
+		DeviceStateAsync(caller.Device, messageId, ct);
+
+	/// <summary>
+	/// One named device's own progress for one message, for the surface that is not the device itself -
+	/// live delivery, which addresses the registration/local instance the receipt came from. Same single
+	/// mapping as the page's, so a live event and a page cannot describe the same row differently.
+	/// </summary>
+	public async Task<MessageDeviceState?> DeviceStateAsync(DeviceContext device, string messageId, CancellationToken ct)
 	{
-		ILookup<string, MessageDeviceState> states = await DeviceStatesAsync(caller, [messageId], ct);
+		ILookup<string, MessageDeviceState> states = await DeviceStatesAsync(device, [messageId], ct);
 		return states[messageId].FirstOrDefault();
 	}
 
@@ -266,11 +294,11 @@ public sealed class SyncProjection(
 	/// nobody else's business - the person's public marks are the recipient states above.
 	/// </summary>
 	private async Task<ILookup<string, MessageDeviceState>> DeviceStatesAsync(
-		SyncCallerIdentity caller, string[] messageIds, CancellationToken ct)
+		DeviceContext device, string[] messageIds, CancellationToken ct)
 	{
 		var states = await db.SyncMessageDeviceStates.AsNoTracking()
-			.Where(s => s.LocalInstanceId == caller.LocalInstanceId
-				&& s.DeviceRegistrationId == caller.DeviceRegistrationId
+			.Where(s => s.LocalInstanceId == device.LocalInstanceId
+				&& s.DeviceRegistrationId == device.DeviceRegistrationId
 				&& messageIds.Contains(s.MessageId))
 			.Select(s => new { s.MessageId, s.Version, s.CiphertextStoredAtUtc, s.ReceivedAtUtc, s.ObservedSeenAtUtc })
 			.ToListAsync(ct);
@@ -279,7 +307,7 @@ public sealed class SyncProjection(
 			s => s.MessageId,
 			s => new MessageDeviceState(
 				s.MessageId,
-				caller.Device,
+				device,
 				Seq(s.Version),
 				s.CiphertextStoredAtUtc is DateTime stored ? RfcTimestamp.Format(stored) : null,
 				s.ReceivedAtUtc is DateTime received ? RfcTimestamp.Format(received) : null,

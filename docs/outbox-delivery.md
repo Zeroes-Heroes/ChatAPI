@@ -92,12 +92,27 @@ republished task (lost confirm, expired lease) and a redelivered one (missing ac
 which is what the contract's "EventId deduplicates delivery" needs. Delivery itself writes nothing, so
 a duplicate costs one extra live event and changes no state.
 
+## Later: more than one kind of task
+
+The v1 receipt surface (`docs/sync-receipts.md`) queues outbox rows for STATUS changes too. A row
+therefore carries its own `ChangeKind`/`SecondaryId` and `DeliverAsync` switches on them after
+re-reading the row by `task.OutboxId` and checking that the task describes it. The broker payload and
+everything above are unchanged, and a row written before that change reads as `Message`, which is what
+it is. Producing those rows is gated by `Delivery__PublishStatusChanges` (default false) until every
+replica runs a consumer that understands the discriminator - an older consumer would deliver a status
+row as a full message.
+
+A status task may also be a deliberate no-op: a change produced under a FROZEN stint is answered
+`Delivered(0)` and addressed to nobody, because an archive's stream ends at its own fixed bound. The
+task is finished and acknowledged exactly like any other - the "no audience" outcome this stage already
+had for a message nobody is entitled to.
+
 ## What this stage does not do
 
 - **No v1 receipts.** `SyncMessageDeviceStates` stays unwritten: a device reports `Received` only
-  after its own durable write and successful verify/decrypt, and that surface is a later stage. The
-  server's part - handing over the package, the key and the author key so the device CAN verify - is
-  what this stage adds.
+  after its own durable write and successful verify/decrypt, and that surface is a later stage (now
+  `docs/sync-receipts.md`). The server's part - handing over the package, the key and the author key so
+  the device CAN verify - is what this stage adds.
 - **No push.** The separate push queue, presence suppression and the delayed-task re-check belong to
   the push stage; only the live queue is declared here.
 - **No client consumer.** Nothing in the app subscribes to `sync-change` yet: the connection

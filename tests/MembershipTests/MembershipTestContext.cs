@@ -81,8 +81,15 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 	/// the REAL trust checker - the same objects the hub resolves, so what these tests exercise is the
 	/// production decision path, not a stand-in.
 	/// </summary>
-	public IMessageStatusService Statuses(AppDbContext db) =>
-		new MessageStatusService(db, Authority(db), new SessionTrustChecker(db, Clock), Clock);
+	/// <param name="config">
+	/// The delivery bounds this writer queues status outbox rows under. Defaults to
+	/// <see cref="DeliveryConfiguration"/>, which has the status-delivery gate ON - a test that wants the
+	/// default-off deployment passes its own.
+	/// </param>
+	public IMessageStatusService Statuses(AppDbContext db, DeliveryOptions? config = null) =>
+		new MessageStatusService(
+			db, Authority(db), new SessionTrustChecker(db, Clock),
+			Options.Create(config ?? DeliveryConfiguration()), Clock);
 
 	/// <summary>
 	/// Stage 09's relation writer, over the same real trust checker every other mutation uses. The push
@@ -129,7 +136,12 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			Clock);
 
 	/// <summary>Stage 12's bounds, with a small attempt limit so exhausting it is observable.</summary>
-	public static DeliveryOptions DeliveryConfiguration() => new()
+	/// <param name="publishStatusChanges">
+	/// The deployment gate behind v1 status delivery. ON by default here, because these tests exercise the
+	/// fully deployed state; production defaults it OFF until every consumer understands
+	/// <c>SyncOutbox.ChangeKind</c>.
+	/// </param>
+	public static DeliveryOptions DeliveryConfiguration(bool publishStatusChanges = true) => new()
 	{
 		ConnectionUri = "amqp://test-only/",
 		ClaimBatchSize = 100,
@@ -137,6 +149,7 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 		RetryBaseSeconds = 2,
 		RetryMaxSeconds = 300,
 		MaxAttempts = 3,
+		PublishStatusChanges = publishStatusChanges,
 	};
 
 	/// <summary>Stage 12's outbox queue over the REAL table, with this context's controllable clock - which is what lets a lease expiry and a backoff be observed rather than waited for.</summary>
@@ -155,6 +168,9 @@ internal sealed class MembershipTestContext(DatabaseFixture fixture, DateTimeOff
 			AuthorKeys(db),
 			new MessageKeyProvisioningService(new AesGcmMessageKeyProtector(new FixedMasterSecretProvider())),
 			new ProtectedMessageKeyStore(),
+			// The same projection the HTTP pages answer from: a live status event and a catch-up page have
+			// to describe the same row identically, including its EventId.
+			Projection(db),
 			Hub,
 			NullLogger<LiveDeliveryService>.Instance);
 

@@ -11,9 +11,18 @@ namespace Services.Delivery.Models;
 /// <param name="EventId">
 /// Deterministic from the chat change this task is about (<see cref="DeliveryEventId.ForChatChange"/>),
 /// so a republished task after a lost confirm and a redelivered one after a missing ack carry the SAME
-/// id - which is exactly what the contract's "EventId deduplicates delivery" needs.
+/// id - which is exactly what the contract's "EventId deduplicates delivery" needs. It is the delivered
+/// id for a MESSAGE, whose immutable change position is its version. A STATUS task takes its id from
+/// <c>SyncEventId</c> instead, derived from the state's own version, because the same status also
+/// reaches a device through an HTTP delta page and the two must deduplicate against each other.
 /// </param>
-/// <param name="ChangeSequence">The chat stream position of the message, as the wire's decimal string.</param>
+/// <param name="ChangeSequence">The chat stream position of the change, as the wire's decimal string.</param>
+/// <remarks>
+/// WHAT a task delivers is deliberately not on the wire: the consumer re-reads the outbox row by
+/// <paramref name="OutboxId"/> and takes the kind and the subject from there, checking that this task
+/// describes that row. Adding a kind here would make the broker payload an authority it must not be, and
+/// would need its own compatibility story for messages already sitting in the queue.
+/// </remarks>
 public sealed record DeliveryTask(
 	int ProtocolVersion,
 	long OutboxId,

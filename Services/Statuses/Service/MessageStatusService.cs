@@ -6,6 +6,8 @@ using Database.Entities.Sync;
 using Database.Enums;
 using Database.Enums.Sync;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Services.Delivery;
 using Services.Extensions;
 using Services.Membership;
 using Services.Membership.Interface;
@@ -29,8 +31,9 @@ namespace Services.Statuses.Service;
 /// exactly one point, in either arrival order, and the FIRST accepted Seen transition is the one that
 /// fixes reason/time and decrements unread.
 /// </summary>
-public sealed class MessageStatusService(
-	AppDbContext db, IChatAccessAuthority accessAuthority, ISessionTrustChecker trustChecker, TimeProvider timeProvider)
+public sealed partial class MessageStatusService(
+	AppDbContext db, IChatAccessAuthority accessAuthority, ISessionTrustChecker trustChecker,
+	IOptions<DeliveryOptions> delivery, TimeProvider timeProvider)
 	: IMessageStatusService
 {
 	/// <summary>docs/sync-contract-v1.md: "Receipt batches cap at both 50 and 32768 bytes." The byte cap is the hub's own transport limit.</summary>

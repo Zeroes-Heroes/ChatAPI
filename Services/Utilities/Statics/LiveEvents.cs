@@ -38,6 +38,16 @@ public static class LiveEvents
 	/// </summary>
 	public static readonly string SyncDeviceGroupFormat = "sync-device:{0}";
 
+	/// <summary>
+	/// The narrower address every connection ALSO joins, for its own local instance (one SQLite copy).
+	/// Private per-device progress - what a device itself reported about storing/receiving a message - is
+	/// published only here: a registration can hold several instances over its life (clearing the local
+	/// database makes a new one), and one copy's progress is not another's. A device registration belongs
+	/// to exactly one account context and a local instance to exactly one registration, so this group is
+	/// per-copy, per-device AND fresh-start isolated.
+	/// </summary>
+	public static readonly string SyncInstanceGroupFormat = "sync-instance:{0}";
+
 	/// <summary>SignalR group name format every connection for a given SessionId joins in BaseHub.OnConnectedAsync, and the only scope SessionRevocationNotifier ever sends to - plan/05-device-sessions.md requires revocation to target exactly that device's own connections, never the whole account/user.</summary>
 	public static readonly string SessionGroupFormat = "session:{0}";
 }

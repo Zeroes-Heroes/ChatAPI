@@ -33,6 +33,14 @@ public sealed record ReportedObservation(DateTime ClientObservedAtUtc, bool WasO
 /// <summary>The outcome of ONE receipt. <paramref name="StateVersion"/> is null exactly for <see cref="ReceiptDisposition.NotApplicable"/>, per the pinned contract.</summary>
 public sealed record MessageReceiptOutcome(int LegacyMessageId, ReceiptDisposition Disposition, long? StateVersion);
 
+/// <summary>
+/// What accepting ONE v1 receipt committed: the wire answer, and whether it queued an outbox row. The
+/// flag exists for the same reason <c>AcceptanceOutcome.OutboxId</c> does - the hub wakes this replica's
+/// publisher after the commit instead of letting the status change wait for the next poll. It is latency
+/// only: the committed row is what makes the change deliverable, from any replica, after any crash.
+/// </summary>
+public sealed record ReceiptAcceptance(ReceiptResult Result, bool QueuedForDelivery);
+
 /// <summary>What one batch of receipts did, plus the public marks to publish AFTER the commit.</summary>
 public sealed record ReceiptBatchResult(
 	int ChatId,

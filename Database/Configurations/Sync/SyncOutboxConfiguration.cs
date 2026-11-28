@@ -1,4 +1,5 @@
 using Database.Entities.Sync;
+using Database.Enums.Sync;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -16,6 +17,8 @@ internal class SyncOutboxConfiguration : IEntityTypeConfiguration<SyncOutboxEnti
 		builder.Property(e => e.ChatId).HasMaxLength(100);
 		builder.Property(e => e.MessageId).HasMaxLength(100);
 		builder.Property(e => e.LeaseOwner).HasMaxLength(100);
+		builder.Property(e => e.SecondaryId).HasMaxLength(100);
+		builder.Property(e => e.ChangeKind).HasDefaultValue(SyncChangeKind.Message).IsRequired();
 
 		builder.Property(e => e.Status).IsRequired();
 		builder.Property(e => e.CreatedAtUtc).IsRequired();
