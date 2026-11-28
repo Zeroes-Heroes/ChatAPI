@@ -118,7 +118,17 @@ public class TokenService(IOptions<AppSettings> appSettings, IDistributedCache c
 	private SecurityTokenDescriptor GetTokenDescriptor(int userId, string deviceId, DateTime expiresOn) =>
 		new()
 		{
-			Subject = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.ToString()), new Claim(CustomClaimTypes.DeviceId, deviceId)]),
+			// Stage 05: this legacy token is a "bootstrap" credential only (phone+SMS+PIN, no device
+			// proof) - it authorizes exactly the Bootstrap-policy device-enrollment endpoints
+			// (Turbo/Controllers/DeviceSession/Controller/DeviceSessionController.cs), never the
+			// default app-session policy every other endpoint/hub requires. Without this claim the
+			// legacy token would remain an unrestricted-access bypass after this stage - see
+			// Services/Sessions/Authorization/AppSessionRequirement.cs.
+			Subject = new ClaimsIdentity([
+				new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+				new Claim(CustomClaimTypes.DeviceId, deviceId),
+				new Claim(Services.Sessions.SessionClaimTypes.TokenPurpose, Services.Sessions.SessionClaimTypes.BootstrapPurpose),
+			]),
 			Expires = expiresOn,
 			Issuer = appSettings.TokenIssuer,
 			Audience = appSettings.TokenAudience,

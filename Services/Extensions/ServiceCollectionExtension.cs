@@ -5,14 +5,25 @@ using MessagePack;
 using MessagePack.Resolvers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Services.Authorship.Interface;
+using Services.Authorship.Service;
 using Services.Chat.Interface;
 using Services.Chat.Service;
+using Services.Contacts.Interface;
+using Services.Contacts.Service;
+using Services.Delivery;
+using Services.Delivery.Interface;
+using Services.Delivery.Service;
+using Services.Crypto.Interface;
+using Services.Crypto.Service;
 using Services.DeviceNotificationConfig.Interface;
 using Services.DeviceNotificationConfig.Service;
 using Services.Friendship.Interface;
@@ -22,6 +33,25 @@ using Services.NotificationDispatch.Interface;
 using Services.NotificationDispatch.Service;
 using Services.Presence.Interface;
 using Services.Presence.Service;
+using Services.Keys;
+using Services.Keys.Interface;
+using Services.Keys.Service;
+using Services.History.Interface;
+using Services.History.Service;
+using Services.Membership.Interface;
+using Services.Membership.Service;
+using Services.Messaging.Interface;
+using Services.Messaging.Service;
+using Services.Recovery.Interface;
+using Services.Recovery.Service;
+using Services.Sessions.Authorization;
+using Services.Statuses.Interface;
+using Services.Statuses.Service;
+using Services.Sessions.Interface;
+using Services.Sessions.Service;
+using Services.Sync.Interface;
+using Services.Sync.Service;
+using Services.Hubs.Filters;
 using Services.Repositories.Chat.Interface;
 using Services.Repositories.Chat.Repository;
 using Services.Repositories.DeviceNotificationConfig.Interface;
@@ -50,7 +80,20 @@ public static class ServiceCollectionExtension
 	public static IServiceCollection ConfigureAppSettings(this IServiceCollection services, IConfiguration config)
 		=> services
 			.Configure<AppSettings>(config)
-			.Configure<NotificationSettings>(config);
+			.Configure<NotificationSettings>(config)
+			// Stage 05: read-only mounted master-secret directory for the key-protection module
+			// (Services/Keys, stage 04) and its session-replay-cache sibling (Services/Sessions). Per
+			// docs/sync-contract-v1.md: "Master secret is mounted read-only outside PostgreSQL" - only
+			// the directory path and current-version name are configuration, never the key bytes
+			// themselves. Bound from a nested "MasterSecret" section (env vars
+			// MasterSecret__DirectoryPath / MasterSecret__CurrentVersion) rather than flat top-level
+			// keys like AppSettings, to avoid colliding with other top-level configuration names.
+			.Configure<MasterSecretOptions>(config.GetSection("MasterSecret"))
+			// Stage 12 (plan/12-outbox-delivery.md): broker connection and the publisher/consumer bounds,
+			// from a nested "Delivery" section (env vars Delivery__ConnectionUri, Delivery__Exchange, ...)
+			// for the same no-collision reason as MasterSecret above. An absent ConnectionUri means this
+			// deployment has no broker, which the two delivery workers report once and then stay idle for.
+			.Configure<DeliveryOptions>(config.GetSection("Delivery"));
 
 	/// <summary>
 	/// Adds and configures the swagger.
@@ -146,12 +189,29 @@ public static class ServiceCollectionExtension
 			};
 		});
 
+		services.AddSingleton<IAuthorizationHandler, BootstrapAuthorizationHandler>();
+		services.AddScoped<IAuthorizationHandler, AppSessionAuthorizationHandler>();
+
 		return services.AddAuthorization(options =>
 		{
+			// Stage 05: every plain [Authorize] (no named Policy) - every existing controller and
+			// BaseHub - now also requires AppSessionRequirement, i.e. an "app"-purpose token whose
+			// session/device/account are currently trusted right now (Services/Sessions/Interface/ISessionTrustChecker.cs),
+			// not merely a validly-signed, unexpired JWT. This is what stops the legacy bootstrap
+			// token (phone+SMS+PIN only, no device proof) from remaining an unrestricted-access bypass:
+			// it never carries an "app" token_purpose claim, so it fails this requirement's very first
+			// check. The two device-enrollment endpoints use the separate, narrower "Bootstrap" policy
+			// instead (AuthorizationController's SMS endpoints stay [AllowAnonymous], unaffected).
 			options.DefaultPolicy = new AuthorizationPolicyBuilder()
 				.RequireAuthenticatedUser()
 				.RequireClaim(ClaimTypes.NameIdentifier)
+				.AddRequirements(AppSessionRequirement.Instance)
 				.Build();
+
+			options.AddPolicy("Bootstrap", policy => policy
+				.RequireAuthenticatedUser()
+				.RequireClaim(ClaimTypes.NameIdentifier)
+				.AddRequirements(BootstrapRequirement.Instance));
 		});
 	}
 
@@ -161,7 +221,8 @@ public static class ServiceCollectionExtension
 	/// <param name="services">IServiceCollection</param>
 	/// <param name="configuration">IConfiguration</param>
 	/// <returns>IServiceCollection</returns>
-	public static IServiceCollection AddServices(this IServiceCollection services) =>
+	public static IServiceCollection AddServices(this IServiceCollection services, IConfiguration configuration)
+	{
 		services
 			.AddTransient<ITokenService, TokenService>()
 			.AddScoped<IAppleService, AppleService>()
@@ -178,7 +239,108 @@ public static class ServiceCollectionExtension
 			.AddScoped<IDeviceNotificationConfigRepository, DeviceNotificationConfigRepository>()
 			.AddScoped<INotificationDispatch, NotificationDispatchService>()
 			.AddScoped<IPresenceService, PresenceService>()
-			.AddSignalR()
+			// Stage 05 device/session module (Services/Sessions). Every registration below is
+			// stateless with respect to AppDbContext - every method that needs one takes it as an
+			// explicit parameter from the caller's own scope (matching Services/Keys's "caller owns
+			// the transaction" convention) - except ISessionTrustChecker, which is the sole piece that
+			// injects AppDbContext directly (it has no per-call caller to supply one: it is invoked
+			// from the authorization handler/hub filter) and so must be Scoped, not Singleton.
+			.AddSingleton<TimeProvider>(TimeProvider.System)
+			.AddSingleton<IMasterSecretProvider, FileMasterSecretProvider>()
+			.AddSingleton<IReplayPayloadProtector, AesGcmReplayPayloadProtector>()
+			.AddSingleton<IDeviceProofVerifier, DeviceProofVerifier>()
+			.AddSingleton<IDeviceChallengeService, DeviceChallengeService>()
+			.AddSingleton<ISessionTokenIssuer, SessionTokenIssuer>()
+			.AddSingleton<IRefreshTokenService, RefreshTokenService>()
+			.AddSingleton<IDeviceTrustService, DeviceTrustService>()
+			.AddSingleton<ISyncAccountProvisioningService, SyncAccountProvisioningService>()
+			.AddSingleton<IDeviceEnrollmentCoordinator, DeviceEnrollmentCoordinator>()
+			// Stage 06 (plan/06-recovery.md). The stage-04 key-protection module gets its first
+			// production caller here (the recovery envelope), so it is registered now. The envelope
+			// service injects the Scoped ISessionTrustChecker for its commit-time authority check and is
+			// therefore Scoped itself; the approval service and recovery coordinator stay stateless
+			// Singletons like their stage-05 siblings.
+			.AddSingleton<IMessageKeyProtector, AesGcmMessageKeyProtector>()
+			.AddScoped<IRecoveryEnvelopeService, RecoveryEnvelopeService>()
+			.AddScoped<IRecoveryEnrollmentCoordinator, RecoveryEnrollmentCoordinator>()
+			.AddSingleton<IDeviceApprovalService, DeviceApprovalService>()
+			.AddScoped<IAccountContextBoundary, AccountContextBoundary>()
+			.AddSingleton<ISessionRefreshCoordinator, SessionRefreshCoordinator>()
+			.AddSingleton<IReplayPayloadCleanupService, ReplayPayloadCleanupService>()
+			// Singleton: one in-memory, per-replica registry of currently-open hub connections for the
+			// whole lifetime of the process - see ISessionConnectionRegistry's own doc comment.
+			.AddSingleton<ISessionConnectionRegistry, SessionConnectionRegistry>()
+			.AddSingleton<ISessionRevocationNotifier, SessionRevocationNotifier>()
+			.AddScoped<ISessionTrustChecker, SessionTrustChecker>()
+			// Stage 07 chat/membership module (Services/Membership). All three are Scoped: each one reads
+			// and writes through the CALLER's own AppDbContext/transaction (the chat lock and the membership
+			// write must share it), exactly like IAccountContextBoundary above.
+			.AddScoped<IPersonalBlockDirectory, PersonalBlockDirectory>()
+			.AddScoped<IChatAccessAuthority, ChatAccessAuthority>()
+			.AddScoped<IChatMembershipService, ChatMembershipService>()
+			// Stage 08 shared history / frozen archives (Services/History). Scoped for the same reason:
+			// it reads through the caller's own AppDbContext and writes only the private per-device
+			// archive record.
+			.AddScoped<IChatHistoryService, ChatHistoryService>()
+			// Stage 09 personal contacts / profile visibility (Services/Contacts). Scoped for the same
+			// reason as the two modules above: the directory and the resolver read through the CALLER's
+			// own AppDbContext, and the writer's row has to commit inside the caller's own
+			// TrustedMutation transaction.
+			.AddScoped<IPersonalRelationDirectory, PersonalRelationDirectory>()
+			.AddScoped<IProfileVisibility, ProfileVisibilityService>()
+			.AddScoped<IPersonalRelationService, PersonalRelationService>()
+			// Stage 10 recipient/device statuses and unread (Services/Statuses). Scoped like every other
+			// module that writes: its rows have to commit inside the CALLER's own transaction (the send's,
+			// the membership mutation's) and it takes the chat lock on that same AppDbContext.
+			.AddScoped<IMessageStatusService, MessageStatusService>()
+			// Author rights for a future edit/delete: a pure decision over an already-resolved ChatAccess
+			// and the caller's own claims, with no state and no database of its own.
+			.AddSingleton<IMessageAuthorshipAuthority, MessageAuthorshipAuthority>()
+			// Stage 11 atomic acceptance (plan/11-message-acceptance.md). The stage-04 crypto verifier and
+			// the key module's provisioning/storage halves get their first production callers here, so they
+			// are registered now; both are stateless (the store takes the caller's own AppDbContext per
+			// call), hence Singleton. The registry and the acceptance service write through the CALLER's
+			// own AppDbContext and transaction, so they are Scoped like every other writing module.
+			.AddSingleton<IMessagePackageVerifier, MessagePackageVerifier>()
+			.AddSingleton<IMessageKeyProvisioningService, MessageKeyProvisioningService>()
+			.AddSingleton<IProtectedMessageKeyStore, ProtectedMessageKeyStore>()
+			.AddScoped<IAuthorKeyRegistry, AuthorKeyRegistry>()
+			.AddScoped<IMessageAcceptanceService, MessageAcceptanceService>()
+			// Stage 12 outbox/live delivery (Services/Delivery). The broker holds one process-wide
+			// connection and the wake-up signal is one per replica, so both are Singletons; the outbox store
+			// and the delivery service read/write through a scope's own AppDbContext (one bounded portion per
+			// scope, per MESSAGE_SYNC_ANALYSIS.md) and are therefore Scoped like every other such module.
+			// The two workers are the only callers of the broker.
+			.AddSingleton<IDeliveryBroker, RabbitMqDeliveryBroker>()
+			.AddSingleton<IOutboxPublishSignal, OutboxPublishSignal>()
+			.AddScoped<IOutboxStore, OutboxStore>()
+			.AddScoped<ILiveDeliveryService, LiveDeliveryService>()
+			.AddHostedService<OutboxPublisherHostedService>()
+			.AddHostedService<DeliveryConsumerHostedService>()
+			// Stage 13 server sync and history (Services/Sync). Every one of them reads and writes through
+			// the CALLER's own AppDbContext and transaction - the handshake fixes its boundaries under the
+			// account's catalog counter row, a page mints its cursor in the same unit of work that answers
+			// it - so they are Scoped like every other module that writes. SyncProjection is registered as
+			// a concrete type on purpose: it is this module's own internal collaborator (the one place
+			// committed state becomes a v1 payload), not a seam another module may swap.
+			.AddScoped<ISyncCursorStore, SyncCursorStore>()
+			.AddScoped<SyncProjection>()
+			.AddScoped<ISyncSessionService, SyncSessionService>()
+			.AddScoped<ISyncPageService, SyncPageService>()
+			.AddScoped<ISyncRetention, SyncRetentionService>()
+			// Periodic bounded replay-payload cleanup + cross-replica idle-connection revalidation - see
+			// SessionMaintenanceHostedService's own doc comment for why these two small, unrelated jobs
+			// share one timer loop instead of being two near-identical hosted services.
+			.AddHostedService<SessionMaintenanceHostedService>();
+
+		ISignalRServerBuilder signalR = services
+			.AddSignalR(options =>
+				{
+					// Re-checks current trust on every hub invocation (including OnConnectedAsync) -
+					// see Services/Hubs/Filters/SessionGuardHubFilter.cs's own doc comment for why
+					// [Authorize]'s connect-time-only check is not enough on its own.
+					options.AddFilter<SessionGuardHubFilter>();
+				})
 				 .AddMessagePackProtocol(options =>
 				 {
 					 options.SerializerOptions = MessagePackSerializerOptions.Standard
@@ -186,8 +348,21 @@ public static class ServiceCollectionExtension
 							  CustomResolver.Instance,
 							  ContractlessStandardResolver.Instance,
 							  StandardResolver.Instance));
-				 })
-			.Services;
+				 });
+
+		// Stage 12 (plan/12-outbox-delivery.md): "Live доставката използва SignalR Redis backplane". The
+		// delivery consumer runs on whichever replica took the broker task, which is generally NOT the
+		// replica holding the recipient's connection - without the backplane its group send would reach
+		// only locally-held connections. The same Redis the distributed cache already uses; with none
+		// configured this stays a single-replica deployment, exactly as before.
+		string? redisConnectionString = configuration["RedisConnection"];
+		if (!string.IsNullOrWhiteSpace(redisConnectionString))
+		{
+			signalR.AddStackExchangeRedis(redisConnectionString);
+		}
+
+		return services.AddScoped<SessionGuardHubFilter>();
+	}
 
 	public static IServiceCollection InitializeTwilio(this IServiceCollection service, IConfiguration configuration)
 	{

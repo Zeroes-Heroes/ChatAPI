@@ -7,8 +7,26 @@ namespace Turbo;
 
 public class Program
 {
+	/// <summary>
+	/// Schema migrations are a separate, explicitly invoked step (plan 02): normal API startup
+	/// never touches the schema, so multiple replicas never race to migrate concurrently and a
+	/// new version's migrations can be applied, verified, and rolled out before any replica of
+	/// that version starts serving traffic. Run this once, before the first replica of a new
+	/// version starts, e.g. as a Kubernetes Job/initContainer or manually:
+	///   dotnet Turbo.dll --migrate-only
+	/// This only brings up configuration and the database connection - none of the application's
+	/// other dependencies (Redis, Twilio, Firebase, SignalR) are initialized for this path.
+	/// </summary>
+	private const string MigrateOnlyArg = "--migrate-only";
+
 	public static void Main(string[] args)
 	{
+		if (args.Contains(MigrateOnlyArg, StringComparer.OrdinalIgnoreCase))
+		{
+			RunMigrateOnly();
+			return;
+		}
+
 		WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 		if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_DOCKER_COMPOSE")))
@@ -38,7 +56,7 @@ public class Program
 			.AddAuthorization()
 			.InitializeTwilio(builder.Configuration)
 			.InitializeFirebase(builder.Configuration)
-			.AddServices()
+			.AddServices(builder.Configuration)
 			.AddEndpointsApiExplorer()
 			.AddControllers();
 
@@ -60,12 +78,25 @@ public class Program
 		app.MapControllers();
 		app.MapHub<BaseHub>("/chatHub");
 
-		using (IServiceScope scope = app.Services.CreateScope())
+		app.Run();
+	}
+
+	private static void RunMigrateOnly()
+	{
+		HostApplicationBuilder builder = Host.CreateApplicationBuilder();
+
+		if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_DOCKER_COMPOSE")))
 		{
-			scope.ServiceProvider.GetRequiredService<AppDbContext>().ApplyMigrations();
+			LoadDotEnv();
+			builder.Configuration.AddEnvironmentVariables();
 		}
 
-		app.Run();
+		builder.Services.AddDatabase(builder.Configuration);
+
+		using IHost host = builder.Build();
+		using IServiceScope scope = host.Services.CreateScope();
+		scope.ServiceProvider.GetRequiredService<AppDbContext>().ApplyMigrations();
+		Console.WriteLine("Migrations applied.");
 	}
 
 	private static void LoadDotEnv()

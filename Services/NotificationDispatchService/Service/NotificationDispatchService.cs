@@ -9,11 +9,13 @@ using Services.Repositories.DeviceNotificationConfig.Interface;
 using Services.Repositories.User.Interface;
 using Services.Utilities.Statics;
 using Services.Constants;
+using Services.Contacts.Interface;
+using Services.Contacts.Models;
 
 namespace Services.NotificationDispatch.Service
 {
 	/// <inheritdoc/>
-	public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IPresenceService presenceService, ILogger<NotificationDispatchService> logger) : INotificationDispatch
+	public class NotificationDispatchService(IDeviceNotificationConfigRepository deviceNotificationConfigRepo, IUserRepository userRepo, IAppleService appleService, IPresenceService presenceService, IProfileVisibility profiles, ILogger<NotificationDispatchService> logger) : INotificationDispatch
 	{
 		private async Task SendPushNotificationToApple(string deviceToken, NotificationPayload notificationInfo)
 		{
@@ -122,6 +124,38 @@ namespace Services.NotificationDispatch.Service
 		private async Task<string> GetUserNameById(int userId) =>
 			await userRepo.GetUserNameById(userId) ?? "";
 
+		/// <summary>
+		/// Stage 09 (plan/09-contacts-privacy.md: "Неприятелите се представят като unknown във всички
+		/// изходи, включително ... известия"). A push is per recipient, so the subject's name is resolved
+		/// per recipient too: the SAME group message is titled with the sender's name for the recipients
+		/// that have a disclosing relation with them and with "unknown" for the strangers in that group.
+		/// Split once for the whole audience rather than resolved per device.
+		/// </summary>
+		private async Task NotifyOfflineUsersWithSubjectAsync(
+			int[] receiversIds, int subjectUserId, Func<string, NotificationPayload> payloadForName)
+		{
+			if (receiversIds.Length == 0) return;
+
+			IReadOnlySet<int> knowsSubject = await profiles.ViewersWhoKnowAsync(subjectUserId, receiversIds);
+
+			int[] knowing = [.. receiversIds.Where(knowsSubject.Contains)];
+			int[] strangers = [.. receiversIds.Where(id => !knowsSubject.Contains(id))];
+
+			if (knowing.Length > 0)
+			{
+				await NotifyOfflineUsers(knowing, subjectUserId, payloadForName(await GetUserNameById(subjectUserId)));
+			}
+
+			if (strangers.Length > 0)
+			{
+				await NotifyOfflineUsers(strangers, subjectUserId, payloadForName(ProfileIdentity.UnknownName));
+			}
+		}
+
+		/// <summary>One recipient: the same rule, asked for that one viewer.</summary>
+		private async Task<string> SubjectNameForAsync(int recipientUserId, int subjectUserId) =>
+			(await profiles.ResolveAsync(recipientUserId, subjectUserId)).Name;
+
 
 		private static NotificationPayload ConstructNotificationPayload(string title, string body, string route)
 		{
@@ -141,23 +175,13 @@ namespace Services.NotificationDispatch.Service
 		}
 
 		// TODO Nikolay: 20.06.2025 --> Refactoring: These hardcoded strings should be moved out
-		public async Task NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId)
-		{
-			string userName = await GetUserNameById(senderUserId);
+		public Task NotificationForNewMessage(int[] receiversIds, int senderUserId, string message, int chatId) =>
+			NotifyOfflineUsersWithSubjectAsync(receiversIds, senderUserId, name =>
+				ConstructChatNotificationPayload($"{name} send you a message", message, ScreenNames.ChatScreen, chatId));
 
-			NotificationPayload notificationPayload = ConstructChatNotificationPayload($"{userName} send you a message", message, ScreenNames.ChatScreen, chatId);
-
-			await NotifyOfflineUsers(receiversIds, senderUserId, notificationPayload);
-		}
-
-		public async Task NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId)
-		{
-			string userName = await GetUserNameById(chatCreatorId);
-
-			NotificationPayload notificationPayload = ConstructChatNotificationPayload("New Created chat", $"{userName} created chat with you.", ScreenNames.ChatScreen, chatId);
-
-			await NotifyOfflineUsers(chatParticipantIds, chatCreatorId, notificationPayload);
-		}
+		public Task NotificationForNewChat(int[] chatParticipantIds, int chatCreatorId, int chatId) =>
+			NotifyOfflineUsersWithSubjectAsync(chatParticipantIds, chatCreatorId, name =>
+				ConstructChatNotificationPayload("New Created chat", $"{name} created chat with you.", ScreenNames.ChatScreen, chatId));
 
 		public async Task NotificationForNewFriendshipRequest(int userId, string name)
 		{
@@ -168,7 +192,7 @@ namespace Services.NotificationDispatch.Service
 
 		public async Task NotificationAcceptFriendship(int notificationRecipientId, int requestSenderId)
 		{
-			string userName = await GetUserNameById(requestSenderId);
+			string userName = await SubjectNameForAsync(notificationRecipientId, requestSenderId);
 
 			NotificationPayload notificationPayload = ConstructNotificationPayload("Accepted request", $"{userName} accepted your friend request", ScreenNames.ContactsScreen);
 
@@ -177,7 +201,7 @@ namespace Services.NotificationDispatch.Service
 
 		public async Task NotificationForRejectedFriendship(int notificationRecipientId, int requestSenderId)
 		{
-			string userName = await GetUserNameById(requestSenderId);
+			string userName = await SubjectNameForAsync(notificationRecipientId, requestSenderId);
 
 			NotificationPayload notificationPayload = ConstructNotificationPayload("Rejected request", $"{userName} reject your friend request", ScreenNames.RejectedRequestsScreen);
 
@@ -186,7 +210,9 @@ namespace Services.NotificationDispatch.Service
 
 		public async Task NotificationForBlockedFriendship(int notificationRecipientId, int requestSenderId)
 		{
-			string userName = await GetUserNameById(requestSenderId);
+			// The blocked party no longer holds a disclosing relation with its blocker, so this resolves to
+			// the "unknown" placeholder - the notification stays, the identity does not.
+			string userName = await SubjectNameForAsync(notificationRecipientId, requestSenderId);
 
 			NotificationPayload notificationPayload = ConstructNotificationPayload("Blocker request", $"{userName} block your friend request", ScreenNames.BlockedContactsScreen);
 

@@ -32,20 +32,10 @@ public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepositor
 					 && userIds.Contains(f.TargetUserId))
 			.FirstOrDefaultAsync();
 
-	public async Task<IEnumerable<FriendshipDTO>> GetUserFriendships(int userId, FriendshipStatus? status = null, bool? isInitiator = null)
-	{
-		IQueryable<FriendshipEntity> query = dbContext.Friendships
-			.Where(f => f.SenderUserId == userId || f.TargetUserId == userId);
-
-		if (status.HasValue)
-			query = query.Where(f => f.Status == status);
-
-		if (isInitiator.HasValue)
-			query = query.Where(f => isInitiator.Value
-							? f.SenderUserId == userId
-							: f.TargetUserId == userId);
-
-		return await query.Select(friendship => new FriendshipDTO(
+	public async Task<IReadOnlyList<FriendshipRelationRow>> GetUserRelations(int userId) =>
+		await dbContext.Friendships.AsNoTracking()
+			.Where(f => f.SenderUserId == userId || f.TargetUserId == userId)
+			.Select(friendship => new FriendshipRelationRow(
 
 				friendship.SenderUserId == userId
 					? friendship.TargetUserId
@@ -59,11 +49,10 @@ public class FriendshipRepository(AppDbContext dbContext) : IFriendshipRepositor
 					? friendship.Target!.Phone
 					: friendship.Sender!.Phone,
 
-				(int)friendship.Status,
+				friendship.Status,
 
 				friendship.SenderUserId == userId))
 			.ToArrayAsync();
-	}
 
 	public Task SaveChangesAsync() =>
 		dbContext.SaveChangesAsync();

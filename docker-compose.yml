@@ -29,3 +29,21 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+
+  # Stage 12 (plan/12-outbox-delivery.md): the durable broker behind outbox delivery. The API reaches it
+  # through Delivery__ConnectionUri (e.g. amqp://guest:guest@rabbitmq:5672/) supplied by the same .env as
+  # every other secret; with that variable unset the API starts exactly as before and the delivery
+  # workers stay idle. The data volume keeps the durable queue across restarts, which is what makes a
+  # published-but-not-yet-consumed task survive a broker restart.
+  rabbitmq:
+    container_name: TurboRabbitMQ
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+volumes:
+  rabbitmq-data:

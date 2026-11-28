@@ -6,6 +6,48 @@ public static class LiveEvents
 	public static readonly string FriendRequestAnswer = "friend-request-answer";
 	public static readonly string NewFriendRequest = "friend-request";
 	public static readonly string ChatCreated = "chat-created";
+
+	/// <summary>Client event name for a committed group composition change (stage 07) - see Services/Membership/Service/ChatMembershipService.cs. A removed subject receives its own copy of this event without the actor's identity.</summary>
+	public static readonly string ChatMembershipChanged = "chat-membership-changed";
+	/// <summary>
+	/// Client event name for a committed personal-relation change (stage 09, plan/09-contacts-privacy.md)
+	/// - a block, an unblock or a contact removal. Both parties receive it, each with the copy that is
+	/// true for IT: the same projection <c>GET /friends</c> returns, so a device sees the same relation
+	/// and the same profile data over SignalR as over HTTP.
+	/// </summary>
+	public static readonly string PersonalRelationChanged = "personal-relation-changed";
 	public static readonly string NewMessageCreated = "new-message-created";
 	public static readonly string MessageStatusUpdate = "message-status-update";
+
+	/// <summary>Client event name for a wire SessionControlEvent, sent to <see cref="SessionGroupFormat"/>'s group - see Services/Sessions/Service/SessionRevocationNotifier.cs.</summary>
+	public static readonly string SessionControl = "session-control";
+
+	/// <summary>
+	/// Stage 12 (plan/12-outbox-delivery.md): one v1 <c>LiveEvent</c>, carried as a JSON string encoded with
+	/// SyncProtocol.CreateJsonOptions() exactly like the hub's own v1 methods. Published by
+	/// Services/Delivery/Service/LiveDeliveryService.cs to <see cref="SyncDeviceGroupFormat"/>'s group.
+	/// </summary>
+	public static readonly string SyncChange = "sync-change";
+
+	/// <summary>
+	/// Stage 12: SignalR group name format every connection joins for its OWN device registration in
+	/// BaseHub.OnConnectedAsync, and the only scope v1 live delivery addresses. A registration belongs to
+	/// exactly one account context (Services/Sessions/Service/DeviceChallengeService.cs refuses a foreign
+	/// one), so this is per-device AND fresh-start isolated - unlike the legacy user-id fan-out, which
+	/// cannot tell a phone's superseded context from its current one.
+	/// </summary>
+	public static readonly string SyncDeviceGroupFormat = "sync-device:{0}";
+
+	/// <summary>
+	/// The narrower address every connection ALSO joins, for its own local instance (one SQLite copy).
+	/// Private per-device progress - what a device itself reported about storing/receiving a message - is
+	/// published only here: a registration can hold several instances over its life (clearing the local
+	/// database makes a new one), and one copy's progress is not another's. A device registration belongs
+	/// to exactly one account context and a local instance to exactly one registration, so this group is
+	/// per-copy, per-device AND fresh-start isolated.
+	/// </summary>
+	public static readonly string SyncInstanceGroupFormat = "sync-instance:{0}";
+
+	/// <summary>SignalR group name format every connection for a given SessionId joins in BaseHub.OnConnectedAsync, and the only scope SessionRevocationNotifier ever sends to - plan/05-device-sessions.md requires revocation to target exactly that device's own connections, never the whole account/user.</summary>
+	public static readonly string SessionGroupFormat = "session:{0}";
 }

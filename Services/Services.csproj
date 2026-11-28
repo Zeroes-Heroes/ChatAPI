@@ -11,13 +11,27 @@
     <PackageReference Include="FirebaseAdmin" Version="3.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.6" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.MessagePack" Version="8.0.6" />
+    <!-- Stage 12 (plan/12-outbox-delivery.md): the SignalR Redis backplane the plan requires for live
+         delivery across replicas - the delivery consumer generally does not run on the replica holding
+         the recipient's connection. Same major/patch line as the other Microsoft.AspNetCore.* pins here. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="8.0.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.6">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.6" />
+    <!-- Stage 05 (plan/05-device-sessions.md): Services.Sessions.Service.SessionMaintenanceHostedService
+         is a BackgroundService (IHostedService) - this project is a plain class library (not
+         Microsoft.NET.Sdk.Web), so it needs this explicit, same as the other individual
+         Microsoft.AspNetCore.*/Microsoft.Extensions.* packages already listed here rather than relying
+         on Turbo.csproj's implicit Microsoft.AspNetCore.App FrameworkReference. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!-- Stage 12: the durable broker behind outbox delivery, at the version docs/sync-dependencies.md
+         pinned in stage 01 ("RabbitMQ.Client 7.2.2, published net8.0 target"). Used only by
+         Services/Delivery/Service/RabbitMqDeliveryBroker.cs. -->
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.2" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <PackageReference Include="System.Text.Json" Version="8.0.4" />
     <PackageReference Include="Twilio" Version="7.2.2" />

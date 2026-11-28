@@ -1,0 +1,43 @@
+using Database.Context;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace RecoveryTests;
+
+/// <summary>
+/// Same pattern as the stage 02/04/05 suites: a real disposable PostgreSQL the full migration chain is
+/// applied to once, on this stage's own port/database so no suite shares rows with another.
+/// </summary>
+public sealed class DatabaseFixture : IDisposable
+{
+	public string ConnectionString { get; }
+
+	public DatabaseFixture()
+	{
+		string host = Environment.GetEnvironmentVariable("RECOVERYTESTS_PG_HOST") ?? "127.0.0.1";
+		string port = Environment.GetEnvironmentVariable("RECOVERYTESTS_PG_PORT") ?? "55436";
+		string username = Environment.GetEnvironmentVariable("RECOVERYTESTS_PG_USER") ?? "postgres";
+		string database = Environment.GetEnvironmentVariable("RECOVERYTESTS_PG_DB") ?? "chatapp_plan06_recovery_test";
+		ConnectionString = $"Host={host};Port={port};Username={username};Database={database}";
+
+		using AppDbContext migrateContext = CreateContext();
+		migrateContext.Database.Migrate();
+	}
+
+	public AppDbContext CreateContext()
+	{
+		DbContextOptionsBuilder<AppDbContext> optionsBuilder = new();
+		optionsBuilder.UseNpgsql(ConnectionString);
+		return new AppDbContext(optionsBuilder.Options);
+	}
+
+	public void Dispose()
+	{
+	}
+}
+
+[CollectionDefinition(Name)]
+public sealed class DatabaseCollection : ICollectionFixture<DatabaseFixture>
+{
+	public const string Name = "Recovery database collection";
+}
